@@ -1,0 +1,2378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OS Kernel Architecture — Monolithic, Microkernel, Hybrid &amp; Layered Systems</title>
+<style>
+/* ============ ROOT / RESET ============ */
+:root{
+  --pri:#0b3d91; --pri2:#1257c4; --pri3:#1e6fd9;
+  --acc:#00b3a4; --acc2:#ff8c42; --acc3:#7b3ff2;
+  --bg:#f2f6fc; --card:#ffffff; --txt:#17202c; --mut:#5a6b80;
+  --bd:#dbe4ef; --ok:#128a4d; --okbg:#e6f7ee; --bad:#c92a2a; --badbg:#fdeaea;
+  --warn:#b57400; --warnbg:#fff6e0; --neu:#3c5a8a; --neubg:#e9f0fb;
+  --shadow:0 2px 8px rgba(11,61,145,.08), 0 8px 24px rgba(11,61,145,.06);
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth; scroll-padding-top:130px;}
+body{
+  margin:0; padding:0; background:var(--bg); color:var(--txt);
+  font-family:"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  font-size:16px; line-height:1.65;
+}
+h1,h2,h3,h4{font-family:Georgia,"Times New Roman",serif; line-height:1.28; margin:0 0 .5em;}
+p{margin:.55em 0;}
+code,kbd,.mono{font-family:"Consolas","Courier New",monospace;}
+
+/* ============ HEADER ============ */
+header.hero{
+  background:linear-gradient(135deg,#08234f 0%,#0b3d91 45%,#1257c4 100%);
+  color:#fff; padding:26px 20px 30px; position:relative; overflow:hidden;
+}
+header.hero::after{
+  content:""; position:absolute; right:-90px; top:-90px; width:340px; height:340px;
+  border-radius:50%; background:radial-gradient(circle,rgba(0,179,164,.35),transparent 68%);
+}
+.hero-inner{max-width:1180px; margin:0 auto; position:relative; z-index:2;}
+.crumbs{font-size:.82rem; letter-spacing:.11em; text-transform:uppercase; color:#9dc4f5; margin-bottom:8px;}
+header.hero h1{font-size:clamp(1.35rem,3.2vw,2.15rem); color:#fff; margin:0 0 6px;}
+header.hero h1 span{color:#5fe3d6;}
+.subline{font-size:.98rem; color:#cfe1f8; margin-bottom:16px;}
+.objbox{
+  background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.22);
+  border-radius:12px; padding:14px 18px; backdrop-filter:blur(4px);
+}
+.objbox h3{margin:0 0 8px; font-size:1rem; color:#8ff0e6; letter-spacing:.04em;}
+.objbox ul{margin:0; padding-left:20px; columns:2; column-gap:30px; font-size:.9rem; color:#eaf3ff;}
+.objbox li{margin-bottom:4px; break-inside:avoid;}
+@media(max-width:700px){.objbox ul{columns:1;}}
+
+/* ============ NAV ============ */
+nav.topnav{
+  position:sticky; top:0; z-index:60; background:#fff;
+  border-bottom:3px solid var(--pri2); box-shadow:0 2px 10px rgba(0,0,0,.07);
+}
+.nav-inner{
+  max-width:1180px; margin:0 auto; display:flex; gap:4px; overflow-x:auto;
+  padding:6px 12px; scrollbar-width:thin;
+}
+.nav-inner a{
+  flex:0 0 auto; text-decoration:none; color:var(--pri); font-size:.83rem; font-weight:600;
+  padding:7px 12px; border-radius:20px; white-space:nowrap; transition:.18s;
+}
+.nav-inner a:hover,.nav-inner a:focus{background:var(--pri); color:#fff;}
+
+/* ============ LAYOUT ============ */
+main{max-width:1180px; margin:0 auto; padding:22px 16px 70px;}
+section{
+  background:var(--card); border:1px solid var(--bd); border-radius:14px;
+  padding:22px 24px; margin-bottom:26px; box-shadow:var(--shadow);
+}
+section>h2{
+  font-size:1.4rem; color:var(--pri); border-bottom:3px solid var(--acc);
+  padding-bottom:8px; margin-bottom:16px; display:flex; align-items:center; gap:10px;
+}
+section>h2 .num{
+  background:var(--pri); color:#fff; font-size:.85rem; font-family:"Segoe UI",sans-serif;
+  width:30px; height:30px; border-radius:50%; display:inline-flex; align-items:center;
+  justify-content:center; flex:0 0 auto;
+}
+h3{color:var(--pri2); font-size:1.12rem; margin-top:20px;}
+h4{color:var(--acc); font-size:.99rem; margin-top:16px; letter-spacing:.02em;}
+
+/* ============ COMPONENTS ============ */
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px;}
+@media(max-width:860px){.grid2,.grid3{grid-template-columns:1fr;}}
+
+.card{
+  border:1px solid var(--bd); border-left:5px solid var(--pri3); border-radius:10px;
+  padding:13px 16px; background:#fbfdff;
+}
+.card.teal{border-left-color:var(--acc);}
+.card.orange{border-left-color:var(--acc2);}
+.card.purple{border-left-color:var(--acc3);}
+.card h4{margin-top:0;}
+
+.box{border-radius:10px; padding:12px 16px; margin:14px 0; font-size:.94rem;}
+.box.def{background:var(--neubg); border-left:5px solid var(--neu);}
+.box.tip{background:var(--okbg); border-left:5px solid var(--ok);}
+.box.warn{background:var(--warnbg); border-left:5px solid var(--warn);}
+.box.err{background:var(--badbg); border-left:5px solid var(--bad);}
+.box b.lbl{display:block; margin-bottom:3px; letter-spacing:.03em; font-size:.83rem; text-transform:uppercase;}
+
+table{width:100%; border-collapse:collapse; margin:14px 0; font-size:.88rem;}
+caption{caption-side:top; text-align:left; font-weight:700; color:var(--pri2); padding-bottom:6px; font-size:.9rem;}
+th,td{border:1px solid var(--bd); padding:8px 10px; text-align:left; vertical-align:top;}
+th{background:var(--pri); color:#fff; font-weight:600; font-size:.84rem; letter-spacing:.02em;}
+tbody tr:nth-child(even){background:#f7fafe;}
+tbody tr:hover{background:#eef5ff;}
+.tbl-wrap{overflow-x:auto;}
+
+ul.tight li,ol.tight li{margin-bottom:5px;}
+ul.check{list-style:none; padding-left:0;}
+ul.check li{padding-left:26px; position:relative; margin-bottom:6px;}
+ul.check li::before{content:"✔"; position:absolute; left:0; color:var(--ok); font-weight:700;}
+ul.cross{list-style:none; padding-left:0;}
+ul.cross li{padding-left:26px; position:relative; margin-bottom:6px;}
+ul.cross li::before{content:"✘"; position:absolute; left:0; color:var(--bad); font-weight:700;}
+
+/* Equations */
+.eq{
+  background:#f7fbff; border:1px solid #cfe0f5; border-left:5px solid var(--pri3);
+  border-radius:9px; padding:12px 16px; margin:14px 0; text-align:center;
+  font-family:"Cambria","Georgia",serif; font-size:1.12rem; overflow-x:auto;
+}
+.eq .lbl{display:block; font-family:"Segoe UI",sans-serif; font-size:.78rem;
+  color:var(--mut); text-transform:uppercase; letter-spacing:.07em; margin-bottom:5px; text-align:left;}
+.eq i{font-style:italic;}
+sub,sup{font-size:.72em;}
+.varlist{font-size:.87rem; color:#33445c; margin:6px 0 12px; padding-left:18px;}
+.varlist li{margin-bottom:3px;}
+
+/* Figures */
+figure{margin:18px 0; text-align:center;}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto;}
+figcaption{font-size:.83rem; color:var(--mut); margin-top:8px; font-style:italic;}
+.figframe{border:1px solid var(--bd); border-radius:12px; padding:12px; background:#fff;}
+
+/* Timing bars */
+.timeline{margin:10px 0 18px;}
+.tl-row{margin-bottom:16px;}
+.tl-label{font-size:.85rem; font-weight:700; color:var(--pri2); margin-bottom:5px;}
+.tl-bar{display:flex; width:100%; height:44px; border-radius:7px; overflow:hidden; border:1px solid var(--bd);}
+.tl-seg{display:flex; align-items:center; justify-content:center; font-size:.7rem; color:#fff;
+  font-weight:600; text-align:center; padding:0 3px; overflow:hidden; white-space:nowrap;}
+.seg-trap{background:#0b3d91;}
+.seg-ipc{background:#ff8c42;}
+.seg-srv{background:#00b3a4;}
+.seg-ret{background:#7b3ff2;}
+.seg-lay{background:#4a7fd4;}
+.tl-scale{display:flex; justify-content:space-between; font-size:.72rem; color:var(--mut); margin-top:3px;}
+
+/* Accordion */
+details.acc{border:1px solid var(--bd); border-radius:10px; margin-bottom:10px; background:#fbfdff; overflow:hidden;}
+details.acc summary{
+  cursor:pointer; padding:11px 16px; font-weight:600; color:var(--pri); font-size:.93rem;
+  list-style:none; display:flex; gap:10px; align-items:flex-start; transition:.15s;
+}
+details.acc summary::-webkit-details-marker{display:none;}
+details.acc summary::before{content:"▸"; color:var(--acc); font-size:1rem; flex:0 0 auto; transition:.2s;}
+details.acc[open] summary::before{transform:rotate(90deg);}
+details.acc[open] summary{background:#eaf2ff; border-bottom:1px solid var(--bd);}
+details.acc summary:hover{background:#eaf2ff;}
+.acc-body{padding:12px 18px 14px; font-size:.9rem;}
+.acc-body ul{margin:6px 0; padding-left:20px;}
+
+/* Badges */
+.badge{display:inline-block; font-size:.68rem; font-weight:700; padding:2px 9px; border-radius:11px;
+  letter-spacing:.05em; text-transform:uppercase; vertical-align:middle;}
+.badge.easy{background:#dcf5e6; color:#0d7a43;}
+.badge.moderate{background:#fff0d6; color:#9a6200;}
+.badge.difficult{background:#fde0e0; color:#a81f1f;}
+.badge.tag{background:#e6eefc; color:var(--pri);}
+
+/* GATE MCQs */
+.mcq{border:1px solid var(--bd); border-radius:11px; padding:14px 17px; margin-bottom:16px; background:#fdfeff;}
+.mcq .qhead{font-weight:600; font-size:.95rem; margin-bottom:9px; color:#12233a;}
+.mcq ol{list-style:upper-alpha; padding-left:26px; margin:0 0 10px; font-size:.9rem;}
+.mcq ol li{margin-bottom:3px;}
+.ansbox{background:var(--okbg); border-left:4px solid var(--ok); border-radius:7px; padding:10px 14px; font-size:.87rem;}
+.ansbox .key{font-weight:700; color:var(--ok);}
+
+/* Quiz */
+.qcard{border:1px solid var(--bd); border-radius:11px; padding:14px 17px; margin-bottom:14px; background:#fdfeff; transition:.2s;}
+.qcard.correct{border-color:var(--ok); background:var(--okbg);}
+.qcard.wrong{border-color:var(--bad); background:var(--badbg);}
+.qcard.unanswered{border-color:var(--warn); background:var(--warnbg);}
+.qtext{font-weight:600; font-size:.94rem; margin:0 0 10px; color:#12233a;}
+.qnum{background:var(--pri); color:#fff; border-radius:6px; padding:1px 8px; font-size:.78rem; margin-right:7px;}
+.opts{display:grid; gap:6px;}
+label.opt{display:flex; gap:9px; align-items:flex-start; padding:7px 11px; border:1px solid var(--bd);
+  border-radius:8px; background:#fff; cursor:pointer; font-size:.89rem; transition:.15s;}
+label.opt:hover{background:#eef5ff; border-color:var(--pri3);}
+label.opt input{margin-top:4px; accent-color:var(--pri2); flex:0 0 auto;}
+.fb{display:none; margin-top:10px; padding:10px 13px; border-radius:8px; font-size:.86rem;}
+.fb.show{display:block;}
+.fb.good{background:#dff5e9; border-left:4px solid var(--ok); color:#0b5c33;}
+.fb.bad{background:#fde5e5; border-left:4px solid var(--bad); color:#8f1d1d;}
+.fb.neutral{background:#fff3d9; border-left:4px solid var(--warn); color:#7a5100;}
+.btnrow{display:flex; flex-wrap:wrap; gap:11px; align-items:center; margin-top:18px;}
+button{
+  font-family:inherit; font-size:.9rem; font-weight:600; padding:10px 22px; border-radius:9px;
+  border:none; cursor:pointer; transition:.18s; letter-spacing:.02em;
+}
+.btn-p{background:var(--pri); color:#fff;}
+.btn-p:hover{background:var(--pri2); transform:translateY(-1px);}
+.btn-s{background:#fff; color:var(--pri); border:2px solid var(--pri);}
+.btn-s:hover{background:var(--pri); color:#fff;}
+.btn-d{background:var(--acc); color:#fff;}
+.btn-d:hover{background:#00968a;}
+.scorebox{
+  margin-top:16px; padding:14px 18px; border-radius:11px; background:linear-gradient(135deg,#0b3d91,#1257c4);
+  color:#fff; font-size:1.02rem; font-weight:600; display:none;
+}
+.scorebox.show{display:block;}
+.scorebox .big{font-size:1.7rem; color:#5fe3d6; font-family:Georgia,serif;}
+.pbar{height:9px; background:rgba(255,255,255,.25); border-radius:5px; margin-top:9px; overflow:hidden;}
+.pbar>div{height:100%; background:#5fe3d6; width:0; transition:width .5s;}
+
+/* misc */
+.hl{background:linear-gradient(transparent 58%, #ffe89b 58%); font-weight:600;}
+.kv{font-size:.86rem;}
+.chip{display:inline-block; background:#e6eefc; color:var(--pri); border-radius:14px;
+  padding:2px 11px; font-size:.75rem; font-weight:600; margin:2px 4px 2px 0;}
+.center{text-align:center;}
+.small{font-size:.82rem; color:var(--mut);}
+
+/* ============ FOOTER ============ */
+footer{
+  background:#08234f; color:#b9d2f2; text-align:center; padding:24px 16px; font-size:.85rem;
+}
+footer a{color:#5fe3d6; text-decoration:none;}
+
+/* ============ PRINT ============ */
+@media print{
+  :root{--shadow:none;}
+  body{background:#fff; font-size:11pt;}
+  nav.topnav,.btnrow,button,.scorebox,.no-print{display:none !important;}
+  header.hero{background:#0b3d91 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  section{break-inside:avoid; page-break-inside:avoid; border:1px solid #999; box-shadow:none; margin-bottom:12px;}
+  .acc-body{display:block !important;}
+  details.acc{border:1px solid #bbb;}
+  details.acc>div{display:block !important;}
+  .fb{display:block !important;}
+  table,figure{break-inside:avoid;}
+  a{color:#000; text-decoration:none;}
+  .tl-bar{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  svg{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== HEADER ==================== -->
+<header class="hero">
+  <div class="hero-inner">
+    <div class="crumbs">Operating Systems &amp; Systems Programming &nbsp;•&nbsp; Unit: Kernel Architecture &amp; Subsystems</div>
+    <h1>Architecture of an Operating System Kernel<br><span>Monolithic · Microkernel · Hybrid · Layered Systems</span></h1>
+    <div class="subline">
+      B.E. / B.Tech — Computer Science &amp; Engineering &nbsp;|&nbsp; GATE CSE / ECE &nbsp;|&nbsp; Core Electronics &amp; Embedded Systems Interviews
+    </div>
+    <div class="objbox">
+      <h3>Learning Objectives — After completing this module you will be able to:</h3>
+      <ul>
+        <li>Define a kernel and state its four core responsibilities.</li>
+        <li>Classify kernels as monolithic, microkernel, hybrid, or layered.</li>
+        <li>Draw and label architecture block diagrams for each class.</li>
+        <li>Trace the complete user→kernel→hardware data path for a system call.</li>
+        <li>Compute system-call latency, IPC overhead fraction, and slowdown factor.</li>
+        <li>Apply Amdahl's Law to kernel decomposition trade-offs.</li>
+        <li>Apply U = 1 − p<sup>n</sup> for multiprogramming degree design.</li>
+        <li>Compute MTBF, MTTR, and availability for fault-isolated kernels.</li>
+        <li>Solve GATE-level numerical and conceptual problems confidently.</li>
+        <li>Answer core-company interview questions on kernel design and debugging.</li>
+      </ul>
+    </div>
+    <div style="margin-top:16px;" class="no-print">
+      <button class="btn-d" onclick="downloadPage()">⬇ Download this page as a standalone HTML file</button>
+    </div>
+  </div>
+</header>
+
+<!-- ==================== NAV ==================== -->
+<nav class="topnav" aria-label="Section navigation">
+  <div class="nav-inner">
+    <a href="#intro">1 · Introduction</a>
+    <a href="#objectives">2 · Objectives &amp; Terms</a>
+    <a href="#diagrams">3 · Architecture Diagrams</a>
+    <a href="#working">4 · Working Principle</a>
+    <a href="#waveforms">5 · Timing &amp; Plots</a>
+    <a href="#equations">6 · Equations</a>
+    <a href="#numericals">7 · Solved Numericals</a>
+    <a href="#gate">8 · GATE Prep</a>
+    <a href="#interview">9 · Interview Prep</a>
+    <a href="#applications">10 · Applications</a>
+    <a href="#quiz">11 · Interactive Quiz</a>
+    <a href="#revision">12 · Revision Sheet</a>
+    <a href="#checks">13 · Validation</a>
+  </div>
+</nav>
+
+<main>
+
+<!-- ==================== 1. INTRODUCTION ==================== -->
+<section id="intro">
+  <h2><span class="num">1</span> Introduction, Fundamental Principle &amp; Importance</h2>
+
+  <div class="box def">
+    <b class="lbl">Definition — Operating System Kernel</b>
+    The <b>kernel</b> is the core, privileged-resident component of an operating system that is loaded first at
+    boot, remains in memory for the entire system lifetime, and holds <em>exclusive</em> authority over the
+    processor, memory, and I/O devices. It is the <b>only</b> software that executes in <b>kernel mode</b>
+    (supervisor/ring-0 privilege) and therefore constitutes the <b>Trusted Computing Base (TCB)</b> of the machine.
+  </div>
+
+  <h3>1.1 Fundamental Operating Principle</h3>
+  <p>
+    A kernel exists to answer one engineering question: <span class="hl">how do we safely multiplex scarce
+    hardware among many competing programs?</span> Three mechanisms achieve this:
+  </p>
+  <ol class="tight">
+    <li><b>Dual-mode operation.</b> The CPU has a privilege bit (PSW/status register). User programs run in
+      <b>user mode</b> where privileged instructions (HALT, IN/OUT, load-PTBR, disable-interrupts) trap.
+      The kernel runs in <b>kernel mode</b>. This is enforced by <em>hardware</em>, not software.</li>
+    <li><b>Trap / system-call gate.</b> A user program requests a service using a deliberate software interrupt
+      (<code>SYSCALL</code>, <code>INT 0x80</code>, <code>SVC</code>, <code>ECALL</code>). The hardware switches
+      to kernel mode, saves the program counter and status, and vectors to the kernel entry point. A
+      <b>trap</b> is a synchronous exception; an <b>interrupt</b> is asynchronous.</li>
+    <li><b>Resource abstraction &amp; protection.</b> The kernel virtualises the CPU (processes/threads), memory
+      (virtual address spaces), storage (files), and devices (drivers) so that a buggy or malicious process
+      cannot damage another process or the kernel itself.</li>
+  </ol>
+
+  <h3>1.2 Why This Topic Matters in Electronics &amp; Computer Engineering</h3>
+  <p>
+    Kernel architecture is not an abstract software topic — it directly determines <b>silicon behaviour</b>:
+  </p>
+  <ul class="tight">
+    <li><b>MMU and TLB design:</b> Page-table walks, TLB shootdowns, and cache-coherency traffic are kernel-driven.
+      Kernel architecture dictates how often the MMU is reprogrammed (a full ASID/PCID flush on every context switch can cost
+      hundreds of cycles).</li>
+    <li><b>Cache behaviour:</b> Mode switches and IPC flush part of L1/L2 because the kernel and user code occupy
+      different working sets. Microkernel message passing is cache-hostile; monolithic calls are cache-friendly.</li>
+    <li><b>Interrupt latency &amp; determinism:</b> Real-time embedded systems (RTOS: FreeRTOS, Zephyr, VxWorks, QNX)
+      choose kernel structure based on <em>bounded worst-case latency</em>, not average throughput.</li>
+    <li><b>Firmware &amp; BSP:</b> Board-support packages and HAL layers are the hardware-facing edge of a layered kernel.</li>
+    <li><b>Certification:</b> DO-178C (avionics), IEC 61508 (industrial), ISO 26262 (automotive ASIL-D) require a small,
+      verifiable TCB — a primary argument for microkernels.</li>
+  </ul>
+
+  <h3>1.3 Prerequisite Concepts</h3>
+  <div class="grid3">
+    <div class="card"><h4>Computer Organisation</h4>CPU registers (PC, SP, PSW), privileged vs non-privileged instructions,
+      interrupt vector table, DMA, MMU/TLB, memory hierarchy.</div>
+    <div class="card teal"><h4>OS Fundamentals</h4>Process vs thread, PCB, context switch, scheduling, virtual memory,
+      paging, file abstraction, deadlock.</div>
+    <div class="card orange"><h4>Systems Programming</h4>C calling convention, stack frames, trap/exception handling,
+      linking, position-independent code, ABI.</div>
+  </div>
+
+  <h3>1.4 Classification of Kernel Architectures</h3>
+  <div class="tbl-wrap">
+  <table>
+    <caption>Table 1.1 — Taxonomy of operating-system kernel architectures</caption>
+    <thead>
+      <tr><th>Architecture</th><th>Core Idea</th><th>Kernel-Mode Footprint</th><th>Representative Systems</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><b>Monolithic</b></td>
+        <td>All OS services (scheduler, MMU mgr, FS, drivers, network, IPC) in one kernel-mode binary and one address space.</td>
+        <td>Very large (10<sup>6</sup>–10<sup>7</sup> LOC)</td>
+        <td>UNIX (SVR4), MS-DOS, classic Linux, FreeBSD</td></tr>
+      <tr><td><b>Modular Monolithic</b></td>
+        <td>Monolithic core + dynamically loadable kernel modules (LKMs) at runtime.</td>
+        <td>Large but extensible</td>
+        <td>Linux, Solaris</td></tr>
+      <tr><td><b>Microkernel</b></td>
+        <td>Kernel keeps only IPC, minimal scheduling, and basic address-space control. FS, drivers, network, paging servers run in <b>user space</b>.</td>
+        <td>Very small (10<sup>4</sup> LOC)</td>
+        <td>Mach, MINIX 3, QNX Neutrino, L4/Fiasco, seL4</td></tr>
+      <tr><td><b>Hybrid</b></td>
+        <td>Microkernel-style structure but performance-critical servers (drivers, FS, graphics) are pulled back into kernel mode.</td>
+        <td>Medium–large</td>
+        <td>Windows NT/10/11, macOS (XNU), ReactOS</td></tr>
+      <tr><td><b>Layered</b></td>
+        <td>Kernel decomposed into a strict hierarchy of layers; layer <i>N</i> may use only layer <i>N</i>−1.</td>
+        <td>Depends on layers implemented</td>
+        <td>Dijkstra's THE, MULTICS, early Windows HAL design</td></tr>
+      <tr><td><b>Exokernel / Unikernel</b></td>
+        <td>Kernel only multiplexes hardware securely; applications link their own library OS.</td>
+        <td>Minimal</td>
+        <td>MIT Exokernel, MirageOS, IncludeOS</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ==================== 2. OBJECTIVES & TERMS ==================== -->
+<section id="objectives">
+  <h2><span class="num">2</span> Learning Objectives, Terminology &amp; Core Definitions</h2>
+
+  <h3>2.1 Important Terminology</h3>
+  <div class="tbl-wrap">
+  <table>
+    <caption>Table 2.1 — Essential kernel-architecture vocabulary</caption>
+    <thead><tr><th>Term</th><th>Precise Definition</th><th>Unit / Note</th></tr></thead>
+    <tbody>
+      <tr><td><b>Kernel mode</b></td><td>CPU privilege level (ring 0 / EL1) permitting all instructions and full memory access.</td><td>Binary state</td></tr>
+      <tr><td><b>User mode</b></td><td>Restricted privilege level (ring 3 / EL0); privileged instructions cause a trap.</td><td>Binary state</td></tr>
+      <tr><td><b>Trap</b></td><td>Synchronous, software-initiated exception transferring control to the kernel (system call, page fault, divide-by-zero).</td><td>—</td></tr>
+      <tr><td><b>Interrupt</b></td><td>Asynchronous hardware-initiated event (timer, NIC, DMA completion) that pre-empts the current instruction stream.</td><td>—</td></tr>
+      <tr><td><b>Mode switch</b></td><td>Hardware privilege-level change only; the executing process is <em>not</em> necessarily changed.</td><td>Cycles / ns</td></tr>
+      <tr><td><b>Context switch</b></td><td>Saving the full state (registers, PC, SP, MMU base) of one thread and restoring another's. Requires a mode switch.</td><td>Cycles / μs</td></tr>
+      <tr><td><b>IPC</b></td><td>Inter-Process Communication: message passing (send/receive) or shared memory used to transfer data between address spaces.</td><td>Messages/s</td></tr>
+      <tr><td><b>TCB</b></td><td>Trusted Computing Base — the set of code that must be correct for the security policy to hold.</td><td>LOC / mm²</td></tr>
+      <tr><td><b>System-call latency</b> T<sub>sc</sub></td><td>Total wall-clock time from the user's call instruction to the return of the result.</td><td>μs or ns</td></tr>
+      <tr><td><b>HAL / BSP</b></td><td>Hardware Abstraction Layer / Board Support Package — the lowest layer isolating CPU/board specifics.</td><td>—</td></tr>
+      <tr><td><b>Loadable Kernel Module</b></td><td>Object code inserted into a running monolithic kernel via <code>insmod</code>/<code>modprobe</code>.</td><td>—</td></tr>
+      <tr><td><b>Page fault</b></td><td>Trap raised when a referenced virtual page is not resident; handled by the kernel's pager.</td><td>—</td></tr>
+      <tr><td><b>MTBF / MTTR</b></td><td>Mean Time Between Failures / Mean Time To Repair.</td><td>hours</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="box tip">
+    <b class="lbl">Key Distinction to Memorise</b>
+    Every <b>context switch</b> involves at least one <b>mode switch</b>, but <b>not every mode switch causes a
+    context switch</b>. A timer interrupt that merely increments a counter and returns performs two mode switches
+    and zero context switches.
+  </div>
+</section>
+
+<!-- ==================== 3. DIAGRAMS ==================== -->
+<section id="diagrams">
+  <h2><span class="num">3</span> Architecture Diagrams &amp; Functional Blocks</h2>
+
+  <!-- ---------- MONOLITHIC ---------- -->
+  <h3>3.1 Monolithic Kernel</h3>
+  <figure>
+    <div class="figframe">
+    <svg viewBox="0 0 780 430" role="img" aria-label="Monolithic kernel architecture block diagram">
+      <defs>
+        <marker id="ar1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#0b3d91"/>
+        </marker>
+        <marker id="ar1g" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#00b3a4"/>
+        </marker>
+      </defs>
+
+      <!-- User space -->
+      <rect x="40" y="10" width="700" height="62" rx="9" fill="#e9f0fb" stroke="#1257c4" stroke-width="2"/>
+      <text x="390" y="36" text-anchor="middle" font-size="15" font-weight="700" fill="#0b3d91">USER SPACE (ring 3)</text>
+      <text x="390" y="58" text-anchor="middle" font-size="12.5" fill="#3c5a8a">Applications · libc · system-call stubs</text>
+
+      <!-- boundary arrow -->
+      <line x1="390" y1="72" x2="390" y2="106" stroke="#0b3d91" stroke-width="2.5" marker-end="url(#ar1)"/>
+      <line x1="470" y1="106" x2="470" y2="72" stroke="#00b3a4" stroke-width="2.5" marker-end="url(#ar1g)"/>
+      <text x="330" y="94" font-size="11" fill="#0b3d91" text-anchor="end">SYSCALL / trap</text>
+      <text x="530" y="94" font-size="11" fill="#00b3a4">return value</text>
+
+      <!-- Kernel big box -->
+      <rect x="40" y="110" width="700" height="238" rx="11" fill="#f5f9ff" stroke="#0b3d91" stroke-width="2.5" stroke-dasharray="0"/>
+      <text x="390" y="134" text-anchor="middle" font-size="15" font-weight="700" fill="#0b3d91">MONOLITHIC KERNEL — single address space, kernel mode (ring 0)</text>
+
+      <!-- sub blocks row 1 -->
+      <rect x="62" y="148" width="205" height="52" rx="7" fill="#dbe8fb" stroke="#1257c4"/>
+      <text x="164" y="172" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0b3d91">Process Scheduler</text>
+      <text x="164" y="189" text-anchor="middle" font-size="10.5" fill="#3c5a8a">CFS / priority / RT</text>
+
+      <rect x="287" y="148" width="205" height="52" rx="7" fill="#dbe8fb" stroke="#1257c4"/>
+      <text x="389" y="172" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0b3d91">Memory Manager</text>
+      <text x="389" y="189" text-anchor="middle" font-size="10.5" fill="#3c5a8a">paging · VM · swap</text>
+
+      <rect x="512" y="148" width="205" height="52" rx="7" fill="#dbe8fb" stroke="#1257c4"/>
+      <text x="614" y="172" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0b3d91">IPC Subsystem</text>
+      <text x="614" y="189" text-anchor="middle" font-size="10.5" fill="#3c5a8a">pipes · shm · signals</text>
+
+      <!-- sub blocks row 2 -->
+      <rect x="62" y="212" width="205" height="52" rx="7" fill="#dbe8fb" stroke="#1257c4"/>
+      <text x="164" y="236" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0b3d91">File System (VFS)</text>
+      <text x="164" y="253" text-anchor="middle" font-size="10.5" fill="#3c5a8a">ext4 · FAT · NFS</text>
+
+      <rect x="287" y="212" width="205" height="52" rx="7" fill="#dbe8fb" stroke="#1257c4"/>
+      <text x="389" y="236" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0b3d91">Device Drivers</text>
+      <text x="389" y="253" text-anchor="middle" font-size="10.5" fill="#3c5a8a">block · char · net</text>
+
+      <rect x="512" y="212" width="205" height="52" rx="7" fill="#dbe8fb" stroke="#1257c4"/>
+      <text x="614" y="236" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0b3d91">Network Stack</text>
+      <text x="614" y="253" text-anchor="middle" font-size="10.5" fill="#3c5a8a">TCP/IP · sockets</text>
+
+      <rect x="62" y="278" width="655" height="52" rx="7" fill="#c9ddf7" stroke="#1257c4"/>
+      <text x="389" y="301" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0b3d91">Loadable Kernel Modules (LKM) · HAL · Interrupt Handlers</text>
+      <text x="389" y="318" text-anchor="middle" font-size="10.5" fill="#3c5a8a">dynamically linked into the same address space at runtime</text>
+
+      <!-- arrow to HW -->
+      <line x1="390" y1="348" x2="390" y2="378" stroke="#0b3d91" stroke-width="2.5" marker-end="url(#ar1)"/>
+      <text x="405" y="368" font-size="11" fill="#0b3d91">privileged MMIO / IN–OUT / IRQ</text>
+
+      <!-- Hardware -->
+      <rect x="40" y="382" width="700" height="42" rx="9" fill="#fff3e0" stroke="#ff8c42" stroke-width="2"/>
+      <text x="390" y="408" text-anchor="middle" font-size="13.5" font-weight="700" fill="#a85400">HARDWARE — CPU · MMU/TLB · RAM · Interrupt Controller · Peripherals</text>
+    </svg>
+    </div>
+    <figcaption>Figure 3.1 — Monolithic kernel: every OS service lives in one kernel-mode address space. A system call is a
+      simple function call after a single trap; no IPC is required.</figcaption>
+  </figure>
+
+  <!-- ---------- MICROKERNEL ---------- -->
+  <h3>3.2 Microkernel</h3>
+  <figure>
+    <div class="figframe">
+    <svg viewBox="0 0 780 470" role="img" aria-label="Microkernel architecture block diagram">
+      <defs>
+        <marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#ff8c42"/>
+        </marker>
+      </defs>
+
+      <!-- user space frame -->
+      <rect x="30" y="10" width="720" height="205" rx="11" fill="#e9f0fb" stroke="#1257c4" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="390" y="32" text-anchor="middle" font-size="14" font-weight="700" fill="#0b3d91">USER SPACE (ring 3) — servers are ordinary processes</text>
+
+      <rect x="52" y="46" width="160" height="68" rx="8" fill="#fff" stroke="#7b3ff2" stroke-width="2"/>
+      <text x="132" y="72" text-anchor="middle" font-size="12" font-weight="700" fill="#5a2bbd">File Server</text>
+      <text x="132" y="90" text-anchor="middle" font-size="10" fill="#5a6b80">ext4 / FAT logic</text>
+      <text x="132" y="105" text-anchor="middle" font-size="10" fill="#5a6b80">user-mode process</text>
+
+      <rect x="228" y="46" width="160" height="68" rx="8" fill="#fff" stroke="#7b3ff2" stroke-width="2"/>
+      <text x="308" y="72" text-anchor="middle" font-size="12" font-weight="700" fill="#5a2bbd">Device Driver</text>
+      <text x="308" y="90" text-anchor="middle" font-size="10" fill="#5a6b80">NIC / storage</text>
+      <text x="308" y="105" text-anchor="middle" font-size="10" fill="#5a6b80">user-mode process</text>
+
+      <rect x="404" y="46" width="160" height="68" rx="8" fill="#fff" stroke="#7b3ff2" stroke-width="2"/>
+      <text x="484" y="72" text-anchor="middle" font-size="12" font-weight="700" fill="#5a2bbd">Network Server</text>
+      <text x="484" y="90" text-anchor="middle" font-size="10" fill="#5a6b80">TCP/IP stack</text>
+      <text x="484" y="105" text-anchor="middle" font-size="10" fill="#5a6b80">user-mode process</text>
+
+      <rect x="580" y="46" width="160" height="68" rx="8" fill="#fff" stroke="#7b3ff2" stroke-width="2"/>
+      <text x="660" y="72" text-anchor="middle" font-size="12" font-weight="700" fill="#5a2bbd">Process Server</text>
+      <text x="660" y="90" text-anchor="middle" font-size="10" fill="#5a6b80">fork / exec / sched</text>
+      <text x="660" y="105" text-anchor="middle" font-size="10" fill="#5a6b80">user-mode process</text>
+
+      <rect x="52" y="128" width="688" height="74" rx="8" fill="#fff" stroke="#00b3a4" stroke-width="2"/>
+      <text x="396" y="152" text-anchor="middle" font-size="12" font-weight="700" fill="#00786e">Client Applications</text>
+      <text x="396" y="172" text-anchor="middle" font-size="10.5" fill="#5a6b80">A client never touches hardware directly — it sends a message to the appropriate server</text>
+      <text x="396" y="190" text-anchor="middle" font-size="10.5" fill="#5a6b80">and blocks until the reply arrives.</text>
+
+      <!-- IPC arrows down to microkernel -->
+      <line x1="132" y1="215" x2="132" y2="255" stroke="#ff8c42" stroke-width="2.5" marker-end="url(#ar2)"/>
+      <line x1="308" y1="215" x2="308" y2="255" stroke="#ff8c42" stroke-width="2.5" marker-end="url(#ar2)"/>
+      <line x1="484" y1="215" x2="484" y2="255" stroke="#ff8c42" stroke-width="2.5" marker-end="url(#ar2)"/>
+      <line x1="660" y1="215" x2="660" y2="255" stroke="#ff8c42" stroke-width="2.5" marker-end="url(#ar2)"/>
+      <text x="396" y="240" text-anchor="middle" font-size="11" font-weight="700" fill="#c2620f">IPC — message passing (send / receive), each hop = a trap + copy</text>
+
+      <!-- Microkernel -->
+      <rect x="120" y="258" width="540" height="112" rx="11" fill="#e0faf7" stroke="#00b3a4" stroke-width="3"/>
+      <text x="390" y="283" text-anchor="middle" font-size="15" font-weight="700" fill="#00786e">MICROKERNEL — minimal TCB (ring 0)</text>
+      <rect x="142" y="296" width="158" height="56" rx="7" fill="#fff" stroke="#00b3a4"/>
+      <text x="221" y="319" text-anchor="middle" font-size="11.5" font-weight="600" fill="#00786e">IPC Engine</text>
+      <text x="221" y="336" text-anchor="middle" font-size="10" fill="#5a6b80">ports · messages</text>
+
+      <rect x="312" y="296" width="158" height="56" rx="7" fill="#fff" stroke="#00b3a4"/>
+      <text x="391" y="319" text-anchor="middle" font-size="11.5" font-weight="600" fill="#00786e">Thread Scheduling</text>
+      <text x="391" y="336" text-anchor="middle" font-size="10" fill="#5a6b80">short-term dispatch</text>
+
+      <rect x="482" y="296" width="158" height="56" rx="7" fill="#fff" stroke="#00b3a4"/>
+      <text x="561" y="319" text-anchor="middle" font-size="11.5" font-weight="600" fill="#00786e">Address Spaces</text>
+      <text x="561" y="336" text-anchor="middle" font-size="10" fill="#5a6b80">basic MMU control</text>
+
+      <line x1="390" y1="370" x2="390" y2="404" stroke="#ff8c42" stroke-width="2.5" marker-end="url(#ar2)"/>
+      <text x="405" y="392" font-size="10.5" fill="#c2620f">privileged access only</text>
+
+      <rect x="30" y="408" width="720" height="48" rx="9" fill="#fff3e0" stroke="#ff8c42" stroke-width="2"/>
+      <text x="390" y="438" text-anchor="middle" font-size="13" font-weight="700" fill="#a85400">HARDWARE — CPU · MMU/TLB · RAM · IRQ Controller · Peripherals</text>
+    </svg>
+    </div>
+    <figcaption>Figure 3.2 — Microkernel: the kernel is reduced to IPC + scheduling + basic address-space management.
+      All other OS services are user-space servers; every request becomes a sequence of kernel-mediated messages.</figcaption>
+  </figure>
+
+  <!-- ---------- LAYERED ---------- -->
+  <h3>3.3 Layered Kernel</h3>
+  <figure>
+    <div class="figframe">
+    <svg viewBox="0 0 780 470" role="img" aria-label="Layered kernel architecture block diagram">
+      <defs>
+        <marker id="ar3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#0b3d91"/>
+        </marker>
+        <marker id="ar3b" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#00b3a4"/>
+        </marker>
+      </defs>
+
+      <!-- down arrow (request) -->
+      <line x1="120" y1="70" x2="120" y2="410" stroke="#0b3d91" stroke-width="2.5" marker-end="url(#ar3)"/>
+      <text x="112" y="240" font-size="12" fill="#0b3d91" text-anchor="middle" transform="rotate(-90 112 240)">REQUEST DESCENDS (system call)</text>
+
+      <!-- up arrow (response) -->
+      <line x1="660" y1="410" x2="660" y2="70" stroke="#00b3a4" stroke-width="2.5" marker-end="url(#ar3b)"/>
+      <text x="678" y="240" font-size="12" fill="#00b3a4" text-anchor="middle" transform="rotate(90 678 240)">RESPONSE ASCENDS (return value)</text>
+
+      <!-- layers -->
+      <rect x="160" y="52" width="440" height="52" rx="8" fill="#dbe8fb" stroke="#1257c4" stroke-width="2"/>
+      <text x="380" y="74" text-anchor="middle" font-size="13" font-weight="700" fill="#0b3d91">Layer 5 — User Interface / Shell / System-call API</text>
+      <text x="380" y="92" text-anchor="middle" font-size="10.5" fill="#3c5a8a">open() · read() · fork() · ioctl()</text>
+
+      <rect x="160" y="114" width="440" height="52" rx="8" fill="#cfe1f8" stroke="#1257c4" stroke-width="2"/>
+      <text x="380" y="136" text-anchor="middle" font-size="13" font-weight="700" fill="#0b3d91">Layer 4 — File System &amp; Logical I/O</text>
+      <text x="380" y="154" text-anchor="middle" font-size="10.5" fill="#3c5a8a">VFS · directory · buffering</text>
+
+      <rect x="160" y="176" width="440" height="52" rx="8" fill="#c4d9f5" stroke="#1257c4" stroke-width="2"/>
+      <text x="380" y="198" text-anchor="middle" font-size="13" font-weight="700" fill="#0b3d91">Layer 3 — Device &amp; I/O Management</text>
+      <text x="380" y="216" text-anchor="middle" font-size="10.5" fill="#3c5a8a">drivers · interrupts · DMA setup</text>
+
+      <rect x="160" y="238" width="440" height="52" rx="8" fill="#b8d1f2" stroke="#1257c4" stroke-width="2"/>
+      <text x="380" y="260" text-anchor="middle" font-size="13" font-weight="700" fill="#0b3d91">Layer 2 — Memory Management</text>
+      <text x="380" y="278" text-anchor="middle" font-size="10.5" fill="#3c5a8a">paging · segmentation · page replacement</text>
+
+      <rect x="160" y="300" width="440" height="52" rx="8" fill="#abc9ef" stroke="#1257c4" stroke-width="2"/>
+      <text x="380" y="322" text-anchor="middle" font-size="13" font-weight="700" fill="#0b3d91">Layer 1 — CPU Scheduling &amp; Synchronisation</text>
+      <text x="380" y="340" text-anchor="middle" font-size="10.5" fill="#3c5a8a">dispatcher · semaphores · timers</text>
+
+      <rect x="160" y="362" width="440" height="52" rx="8" fill="#fff3e0" stroke="#ff8c42" stroke-width="2.5"/>
+      <text x="380" y="384" text-anchor="middle" font-size="13" font-weight="700" fill="#a85400">Layer 0 — HARDWARE (CPU, MMU, RAM, Devices)</text>
+      <text x="380" y="402" text-anchor="middle" font-size="10.5" fill="#c2620f">primitives only — no policy</text>
+
+      <!-- constraint note -->
+      <text x="380" y="440" text-anchor="middle" font-size="11.5" font-style="italic" fill="#5a6b80">Constraint: Layer N may call only Layer N−1 (strict downward dependency, no upward or sideways calls)</text>
+      <text x="380" y="458" text-anchor="middle" font-size="11.5" font-style="italic" fill="#5a6b80">Cost: a request crossing n layers incurs n layer-entry + n layer-exit overheads.</text>
+    </svg>
+    </div>
+    <figcaption>Figure 3.3 — Layered kernel. Debuggability is excellent because each layer can be verified against the
+      interface of the layer below; the cost is added latency per layer crossing.</figcaption>
+  </figure>
+
+  <!-- ---------- HYBRID ---------- -->
+  <h3>3.4 Hybrid Kernel (e.g. Windows NT, macOS XNU)</h3>
+  <figure>
+    <div class="figframe">
+    <svg viewBox="0 0 780 400" role="img" aria-label="Hybrid kernel architecture block diagram">
+      <rect x="30" y="10" width="720" height="118" rx="11" fill="#f3ecff" stroke="#7b3ff2" stroke-width="2"/>
+      <text x="390" y="33" text-anchor="middle" font-size="14" font-weight="700" fill="#5a2bbd">USER MODE</text>
+      <rect x="52" y="46" width="210" height="64" rx="7" fill="#fff" stroke="#7b3ff2"/>
+      <text x="157" y="70" text-anchor="middle" font-size="11.5" font-weight="600" fill="#5a2bbd">Environment Subsystems</text>
+      <text x="157" y="88" text-anchor="middle" font-size="10" fill="#5a6b80">Win32 · POSIX · WSL · BSD</text>
+      <rect x="285" y="46" width="210" height="64" rx="7" fill="#fff" stroke="#7b3ff2"/>
+      <text x="390" y="70" text-anchor="middle" font-size="11.5" font-weight="600" fill="#5a2bbd">User-Mode Servers</text>
+      <text x="390" y="88" text-anchor="middle" font-size="10" fill="#5a6b80">graphics · audio · print spooler</text>
+      <rect x="518" y="46" width="210" height="64" rx="7" fill="#fff" stroke="#7b3ff2"/>
+      <text x="623" y="70" text-anchor="middle" font-size="11.5" font-weight="600" fill="#5a2bbd">Subsystem DLLs</text>
+      <text x="623" y="88" text-anchor="middle" font-size="10" fill="#5a6b80">ntdll.dll system-call stubs</text>
+
+      <line x1="390" y1="128" x2="390" y2="152" stroke="#0b3d91" stroke-width="2.5"/>
+      <text x="404" y="146" font-size="10.5" fill="#0b3d91">syscall interface (LPC / trap)</text>
+
+      <rect x="30" y="156" width="720" height="152" rx="11" fill="#e9f0fb" stroke="#0b3d91" stroke-width="2.5"/>
+      <text x="390" y="179" text-anchor="middle" font-size="14" font-weight="700" fill="#0b3d91">KERNEL MODE — hybrid: microkernel-style structure, monolithic-style performance</text>
+
+      <rect x="52" y="192" width="210" height="52" rx="7" fill="#dbe8fb" stroke="#1257c4"/>
+      <text x="157" y="214" text-anchor="middle" font-size="11.5" font-weight="600" fill="#0b3d91">Executive Services</text>
+      <text x="157" y="231" text-anchor="middle" font-size="10" fill="#3c5a8a">object mgr · VM · I/O mgr</text>
+
+      <rect x="285" y="192" width="210" height="52" rx="7" fill="#dbe8fb" stroke="#1257c4"/>
+      <text x="390" y="214" text-anchor="middle" font-size="11.5" font-weight="600" fill="#0b3d91">Kernel-Mode Drivers</text>
+      <text x="390" y="231" text-anchor="middle" font-size="10" fill="#3c5a8a">moved back for speed</text>
+
+      <rect x="518" y="192" width="210" height="52" rx="7" fill="#dbe8fb" stroke="#1257c4"/>
+      <text x="623" y="214" text-anchor="middle" font-size="11.5" font-weight="600" fill="#0b3d91">File System Drivers</text>
+      <text x="623" y="231" text-anchor="middle" font-size="10" fill="#3c5a8a">NTFS · FAT · network FS</text>
+
+      <rect x="52" y="252" width="676" height="44" rx="7" fill="#c9ddf7" stroke="#1257c4"/>
+      <text x="390" y="279" text-anchor="middle" font-size="12" font-weight="600" fill="#0b3d91">Microkernel-like core: Scheduling · IPC (LPC) · Interrupt &amp; Trap Handling · Synchronisation</text>
+
+      <line x1="390" y1="308" x2="390" y2="332" stroke="#ff8c42" stroke-width="2.5"/>
+      <rect x="30" y="336" width="720" height="52" rx="9" fill="#fff3e0" stroke="#ff8c42" stroke-width="2"/>
+      <text x="390" y="358" text-anchor="middle" font-size="12.5" font-weight="700" fill="#a85400">HAL — Hardware Abstraction Layer</text>
+      <text x="390" y="377" text-anchor="middle" font-size="10.5" fill="#c2620f">CPU · MMU · interrupt controller · bus · DMA — the only truly machine-dependent code</text>
+    </svg>
+    </div>
+    <figcaption>Figure 3.4 — Hybrid kernel: message-passing structure is retained, but performance-critical components
+      (drivers, file systems, graphics) execute in kernel mode to avoid IPC cost.</figcaption>
+  </figure>
+
+  <h3>3.5 Component / Function Table</h3>
+  <div class="tbl-wrap">
+  <table>
+    <caption>Table 3.1 — Kernel subsystems, their responsibility, and their architectural placement</caption>
+    <thead><tr><th>Subsystem</th><th>Primary Responsibility</th><th>Monolithic</th><th>Microkernel</th><th>Layered</th></tr></thead>
+    <tbody>
+      <tr><td>Process / thread scheduler</td><td>Choose next thread, dispatch, maintain ready queues</td><td>Kernel</td><td>Kernel (minimal)</td><td>Layer 1</td></tr>
+      <tr><td>Memory manager / pager</td><td>Virtual→physical translation policy, page replacement, swap</td><td>Kernel</td><td>Kernel (basic) + pager server</td><td>Layer 2</td></tr>
+      <tr><td>IPC</td><td>Message queues, shared memory, signals, ports</td><td>Kernel</td><td><b>Kernel (core)</b></td><td>Layer 1–3</td></tr>
+      <tr><td>File system</td><td>Namespace, inodes, allocation, buffering</td><td>Kernel</td><td><b>User server</b></td><td>Layer 4</td></tr>
+      <tr><td>Device drivers</td><td>Register access, DMA setup, ISR handling</td><td>Kernel</td><td><b>User server</b></td><td>Layer 3</td></tr>
+      <tr><td>Network stack</td><td>TCP/IP, sockets, routing, NIC queues</td><td>Kernel</td><td><b>User server</b></td><td>Layer 3–4</td></tr>
+      <tr><td>Interrupt / trap handling</td><td>Vector dispatch, save/restore context, EOI</td><td>Kernel</td><td>Kernel</td><td>Layer 1</td></tr>
+      <tr><td>HAL / BSP</td><td>Portability: CPU/bus/board specifics</td><td>Inline</td><td>Inline</td><td>Layer 0</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ==================== 4. WORKING PRINCIPLE ==================== -->
+<section id="working">
+  <h2><span class="num">4</span> Working Principle &amp; Detailed Step-by-Step Explanation</h2>
+
+  <h3>4.1 The Universal System-Call Path (Common to All Architectures)</h3>
+  <ol class="tight">
+    <li><b>User program prepares arguments</b> and places the system-call number in a designated register
+      (e.g. <code>rax</code> on x86-64, <code>a7</code> on RISC-V, <code>r7</code> on ARM EABI).</li>
+    <li><b>Execution of a trap instruction</b> (<code>syscall</code> / <code>svc #0</code> / <code>ecall</code>).
+      The hardware:
+      <ul class="tight">
+        <li>saves the return address (PC) and status word (PSW),</li>
+        <li>switches the privilege bit from user (ring 3 / EL0) to kernel (ring 0 / EL1),</li>
+        <li>loads the kernel entry vector and begins executing the trap handler.</li>
+      </ul></li>
+    <li><b>Kernel saves the user context</b> on the kernel stack (register file, floating-point state if lazy-FPU).</li>
+    <li><b>Dispatch</b>: the syscall number indexes a table (<code>sys_call_table</code>) to the service routine.</li>
+    <li><b>Validation</b>: every user-supplied pointer is range-checked (<code>copy_from_user</code>) — this is
+      the security-critical step preventing a user from passing a kernel address.</li>
+    <li><b>Service execution</b>: the kernel (or a user-space server) performs the work.</li>
+    <li><b>Result return</b>: the value is placed in the return register; the kernel restores context and executes
+      a return-from-trap (<code>sysret</code> / <code>eret</code> / <code>iret</code>), dropping privilege back to user mode.</li>
+  </ol>
+
+  <div class="box tip">
+    <b class="lbl">Engineering Insight</b>
+    Steps 3 and 4 look trivial but are where most of the cost lives. A modern x86-64 <code>SYSCALL</code> instruction
+    itself costs roughly 30–80 cycles; the surrounding save/restore, security checks and possible cache/TLB
+    disturbance push the <em>total</em> observable latency into the 200 ns – 1 μs range. Measuring this is a standard
+    embedded-systems benchmark (e.g. <code>lmbench</code>, <code>cyclictest</code>).
+  </div>
+
+  <h3>4.2 Behaviour by Architecture</h3>
+
+  <h4>(a) Monolithic Kernel</h4>
+  <p>
+    After the trap, the service routine is reached by an <b>ordinary function call</b>. No address-space change
+    occurs, no message is copied, no extra scheduling decision is needed unless the call blocks. The steps are
+    therefore:
+  </p>
+  <p class="center mono" style="background:#f7fbff;border:1px solid #cfe0f5;border-radius:8px;padding:10px;font-size:.85rem;">
+    user → <b>trap</b> → dispatch → service (in-kernel) → <b>return</b> → user
+  </p>
+  <p><b>Operating conditions:</b> the kernel must be re-entrant or protected by locks because multiple CPUs may be
+    executing kernel code simultaneously. A single driver bug can corrupt the whole kernel (no fault isolation).</p>
+
+  <h4>(b) Microkernel</h4>
+  <p>
+    A client cannot perform the operation itself; it must ask a server. The path becomes:
+  </p>
+  <p class="center mono" style="background:#fff7f0;border:1px solid #ffd9b3;border-radius:8px;padding:10px;font-size:.82rem;">
+    client → trap → kernel IPC (copy msg) → switch to server → server runs → trap → kernel IPC (copy reply) → switch back to client → return
+  </p>
+  <p><b>Input-to-output signal flow:</b> data is physically <em>copied</em> from the client's address space into the
+    kernel's message buffer and then into the server's address space (unless the kernel supports virtual-memory
+    message remapping, which L4/seL4 do to avoid the copy). Each hop costs a mode switch plus a TLB/cache disturbance.</p>
+  <p><b>Operating conditions:</b> the IPC primitive must be extremely fast and must not itself be pre-emptible in an
+    unbounded way, otherwise the "microkernel advantage" is lost to overhead.</p>
+
+  <h4>(c) Layered Kernel</h4>
+  <p>
+    Each layer presents a clean interface to the layer above. A request must descend through every intermediate
+    layer, and the result must ascend back. If layer <i>N</i> needs a service that layer <i>N</i>−2 provides, the
+    request must still pass through layer <i>N</i>−1 — this is the source of the well-known performance penalty.
+  </p>
+  <p><b>Operating conditions / assumptions:</b> strict layering assumes that every needed primitive can be expressed
+    in terms of the layer below. In practice this is not always possible (e.g. a file-system layer may need a memory
+    primitive that is logically "below" it), which is why real systems relax the strictness.</p>
+
+  <h4>(d) Hybrid Kernel</h4>
+  <p>
+    Combines a microkernel-style <em>core</em> (scheduling, IPC, traps) with in-kernel servers for latency-critical
+    work. Windows NT's design intent was a microkernel; NT 3.1 actually shipped with the window manager and graphics
+    device drivers in kernel mode (for speed), making it a hybrid from the start. macOS XNU is a hybrid of Mach
+    (microkernel), BSD (monolithic UNIX) and I/O Kit (drivers), glued together with a single shared address space
+    in kernel mode.
+  </p>
+
+  <h3>4.3 Comparison of Operating Modes and Overheads</h3>
+  <div class="tbl-wrap">
+  <table>
+    <caption>Table 4.1 — Where each architecture spends its time</caption>
+    <thead><tr><th>Cost Component</th><th>Monolithic</th><th>Microkernel</th><th>Hybrid</th><th>Layered</th></tr></thead>
+    <tbody>
+      <tr><td>Trap / mode switch</td><td>1</td><td>2 or more</td><td>1–2</td><td>1</td></tr>
+      <tr><td>IPC messages per request</td><td>0</td><td>2 (send + reply)</td><td>0–1</td><td>0</td></tr>
+      <tr><td>Address-space switches</td><td>0</td><td>2 per IPC hop</td><td>0</td><td>0</td></tr>
+      <tr><td>Layer crossings</td><td>0</td><td>0</td><td>0</td><td>up to <i>n</i></td></tr>
+      <tr><td>Fault isolation</td><td>Poor</td><td>Excellent</td><td>Moderate</td><td>Depends on layer</td></tr>
+      <tr><td>Portability</td><td>Poor</td><td>Excellent</td><td>Good</td><td>Good</td></tr>
+      <tr><td>Typical latency order</td><td>~0.5–1 μs</td><td>~5–20 μs</td><td>~1–3 μs</td><td>~1–5 μs</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>4.4 Advantages, Limitations &amp; Design Considerations</h3>
+  <div class="grid2">
+    <div class="card teal">
+      <h4>Monolithic — Advantages</h4>
+      <ul class="check tight">
+        <li>Lowest system-call latency (pure function call after trap).</li>
+        <li>Shared kernel data structures → simple, fast locking.</li>
+        <li>Zero IPC cost between subsystems.</li>
+        <li>Mature tooling, huge driver ecosystem (Linux).</li>
+      </ul>
+      <h4>Monolithic — Limitations</h4>
+      <ul class="cross tight">
+        <li>No fault isolation: one driver bug = kernel panic.</li>
+        <li>Huge TCB → large attack surface, hard certification.</li>
+        <li>Poor portability; changes ripple across the tree.</li>
+        <li>Difficult to debug; hard to test in isolation.</li>
+      </ul>
+    </div>
+    <div class="card orange">
+      <h4>Microkernel — Advantages</h4>
+      <ul class="check tight">
+        <li>Excellent fault isolation — a crashed server restarts.</li>
+        <li>Tiny TCB → formally verifiable (seL4 proved 10 000 LOC).</li>
+        <li>Highly portable; hardware specifics confined to kernel.</li>
+        <li>Servers can be swapped, upgraded, or debugged in user space.</li>
+      </ul>
+      <h4>Microkernel — Limitations</h4>
+      <ul class="cross tight">
+        <li>High IPC overhead; typically 3–10× slower system calls.</li>
+        <li>More context switches, worse cache/TLB locality.</li>
+        <li>Complex IPC protocol design and debugging.</li>
+        <li>Higher memory footprint (many servers).</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="box warn">
+    <b class="lbl">Common Student Misconceptions</b>
+    <ul class="tight" style="margin:6px 0 0;">
+      <li><b>"Microkernel means fewer context switches."</b> False — it means <em>more</em>, because each IPC hop
+        may schedule a different thread.</li>
+      <li><b>"Layered means the OS is slow, so nobody uses it."</b> False — nearly every real kernel is layered
+        <em>internally</em> (Linux's VFS → block layer → driver is a layering). "Layered architecture" as a formal
+        classification refers to <em>strict</em>, non-bypassable layering.</li>
+      <li><b>"A mode switch equals a context switch."</b> See §2.1 — a mode switch does not change the running
+        process.</li>
+      <li><b>"Windows NT is a pure microkernel."</b> It was <em>designed</em> as one but shipped as a hybrid.</li>
+      <li><b>"More layers always means more robust."</b> Each layer adds an interface that must itself be verified;
+        over-layering increases code and complexity.</li>
+      <li><b>"Linux is not monolithic because it has modules."</b> Modules execute in kernel mode in the same
+        address space, so Linux is <em>modular monolithic</em>.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ==================== 5. TIMING / PLOTS ==================== -->
+<section id="waveforms">
+  <h2><span class="num">5</span> Timing Diagrams &amp; Performance Plots</h2>
+
+  <div class="box def">
+    <b class="lbl">Note on Illustrative Data</b>
+    No simulation screenshot was supplied with this topic. All timing diagrams and plots below are
+    <b>illustrative</b>, constructed from the standard analytical models developed in §6. The numeric values used are
+    representative of typical x86-64 / ARM64 hardware and are used consistently in the solved problems of §7.
+  </div>
+
+  <h3>5.1 System-Call Latency Timeline — Monolithic vs Microkernel</h3>
+  <p>
+    The bars below use the values of <b>Solved Problem 3</b>: T<sub>trap</sub> = 0.5 μs, T<sub>srv</sub> = 2.5 μs,
+    T<sub>ret</sub> = 0.2 μs, and T<sub>ipc</sub> = 1.8 μs per hop with <i>k</i> = 4 hops.
+  </p>
+
+  <div class="timeline">
+    <div class="tl-row">
+      <div class="tl-label">Monolithic kernel — T<sub>mono</sub> = 3.2 μs</div>
+      <div class="tl-bar">
+        <div class="tl-seg seg-trap" style="flex:0 0 15.6%;">trap 0.5</div>
+        <div class="tl-seg seg-srv"  style="flex:0 0 78.1%;">in-kernel service 2.5 μs</div>
+        <div class="tl-seg seg-ret"  style="flex:0 0 6.3%;">ret</div>
+      </div>
+      <div class="tl-scale"><span>0 μs</span><span>3.2 μs</span></div>
+    </div>
+
+    <div class="tl-row">
+      <div class="tl-label">Microkernel — T<sub>micro</sub> = 10.4 μs (3.25× slower)</div>
+      <div class="tl-bar">
+        <div class="tl-seg seg-trap" style="flex:0 0 4.81%;">trap</div>
+        <div class="tl-seg seg-ipc"  style="flex:0 0 17.31%;">IPC 1</div>
+        <div class="tl-seg seg-ipc"  style="flex:0 0 17.31%;">IPC 2</div>
+        <div class="tl-seg seg-srv"  style="flex:0 0 24.04%;">server work 2.5</div>
+        <div class="tl-seg seg-ipc"  style="flex:0 0 17.31%;">IPC 3</div>
+        <div class="tl-seg seg-ipc"  style="flex:0 0 17.31%;">IPC 4</div>
+        <div class="tl-seg seg-ret"  style="flex:0 0 1.92%;">r</div>
+      </div>
+      <div class="tl-scale"><span>0 μs</span><span>10.4 μs</span></div>
+    </div>
+  </div>
+
+  <div class="small">
+    Legend:
+    <span class="chip" style="background:#0b3d91;color:#fff;">Trap / mode switch</span>
+    <span class="chip" style="background:#ff8c42;color:#fff;">IPC hop (2.2 μs incl. copy)</span>
+    <span class="chip" style="background:#00b3a4;color:#fff;">Actual service work</span>
+    <span class="chip" style="background:#7b3ff2;color:#fff;">Return to user</span>
+  </div>
+  <p class="small">
+    <b>Observation:</b> the useful work (teal) is identical in both cases — 2.5 μs. The entire 7.2 μs difference is
+    pure <em>architecture overhead</em>, i.e. 69.2 % of the microkernel latency is IPC. This single fact explains why
+    hybrid kernels exist.
+  </p>
+
+  <h3>5.2 Privilege-Level State Timeline (One System Call)</h3>
+  <figure>
+    <div class="figframe">
+    <svg viewBox="0 0 780 260" role="img" aria-label="Privilege level versus time for a system call">
+      <!-- axes -->
+      <line x1="80" y1="30" x2="80" y2="215" stroke="#5a6b80" stroke-width="2"/>
+      <line x1="80" y1="215" x2="740" y2="215" stroke="#5a6b80" stroke-width="2"/>
+      <text x="40" y="60" font-size="11.5" fill="#0b3d91" font-weight="700">KERNEL</text>
+      <text x="42" y="60" font-size="11.5" fill="#0b3d91" font-weight="700"></text>
+      <text x="48" y="190" font-size="11.5" fill="#c92a2a" font-weight="700">USER</text>
+      <text x="410" y="238" font-size="12" fill="#5a6b80" text-anchor="middle">time →</text>
+
+      <!-- guides -->
+      <line x1="80" y1="55" x2="740" y2="55" stroke="#cfe0f5" stroke-width="1" stroke-dasharray="4 4"/>
+      <line x1="80" y1="180" x2="740" y2="180" stroke="#f5d0d0" stroke-width="1" stroke-dasharray="4 4"/>
+
+      <!-- signal -->
+      <polyline fill="none" stroke="#1257c4" stroke-width="3"
+        points="80,180 170,180 170,55 330,55 330,180 470,180 470,55 610,55 610,180 740,180"/>
+
+      <!-- annotations -->
+      <text x="125" y="200" font-size="10.5" fill="#c92a2a" text-anchor="middle">user code</text>
+      <text x="250" y="45" font-size="10.5" fill="#0b3d91" text-anchor="middle">kernel: validate + execute service</text>
+      <text x="400" y="200" font-size="10.5" fill="#c92a2a" text-anchor="middle">(blocking / pre-empted)</text>
+      <text x="540" y="45" font-size="10.5" fill="#0b3d91" text-anchor="middle">kernel: copy result, restore</text>
+      <text x="675" y="200" font-size="10.5" fill="#c92a2a" text-anchor="middle">user resumes</text>
+
+      <!-- transition markers -->
+      <line x1="170" y1="30" x2="170" y2="215" stroke="#ff8c42" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <text x="174" y="26" font-size="10" fill="#c2620f">trap ↑</text>
+      <line x1="610" y1="30" x2="610" y2="215" stroke="#ff8c42" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <text x="614" y="26" font-size="10" fill="#c2620f">return ↓</text>
+    </svg>
+    </div>
+    <figcaption>Figure 5.1 — Privilege-level vs time for a single blocking system call (illustrative). Each vertical
+      edge is one <b>mode switch</b>; there are four edges, hence four mode switches and two traps.</figcaption>
+  </figure>
+
+  <h3>5.3 CPU Utilisation vs Degree of Multiprogramming</h3>
+  <p>
+    Using the classic model <b>U = 1 − p<sup>n</sup></b>, where <i>p</i> is the probability that a process is waiting
+    for I/O and <i>n</i> is the number of processes resident in memory:
+  </p>
+  <figure>
+    <div class="figframe">
+    <svg viewBox="0 0 780 380" role="img" aria-label="CPU utilisation versus degree of multiprogramming for p = 0.8, 0.5, 0.2">
+      <!-- grid -->
+      <line x1="70" y1="320" x2="720" y2="320" stroke="#5a6b80" stroke-width="2"/>
+      <line x1="70" y1="40"  x2="70"  y2="320" stroke="#5a6b80" stroke-width="2"/>
+
+      <!-- horizontal grid -->
+      <line x1="70" y1="250" x2="720" y2="250" stroke="#e3ecf7" stroke-width="1"/>
+      <line x1="70" y1="180" x2="720" y2="180" stroke="#e3ecf7" stroke-width="1"/>
+      <line x1="70" y1="110" x2="720" y2="110" stroke="#e3ecf7" stroke-width="1"/>
+      <line x1="70" y1="40"  x2="720" y2="40"  stroke="#e3ecf7" stroke-width="1"/>
+
+      <!-- y labels -->
+      <text x="60" y="324" font-size="11" text-anchor="end" fill="#5a6b80">0.00</text>
+      <text x="60" y="254" font-size="11" text-anchor="end" fill="#5a6b80">0.25</text>
+      <text x="60" y="184" font-size="11" text-anchor="end" fill="#5a6b80">0.50</text>
+      <text x="60" y="114" font-size="11" text-anchor="end" fill="#5a6b80">0.75</text>
+      <text x="60" y="44"  font-size="11" text-anchor="end" fill="#5a6b80">1.00</text>
+      <text x="26" y="185" font-size="12" fill="#0b3d91" font-weight="700" transform="rotate(-90 26 185)">CPU utilisation U</text>
+
+      <!-- x labels -->
+      <text x="70"  y="340" font-size="11" text-anchor="middle" fill="#5a6b80">0</text>
+      <text x="133" y="340" font-size="11" text-anchor="middle" fill="#5a6b80">1</text>
+      <text x="196" y="340" font-size="11" text-anchor="middle" fill="#5a6b80">2</text>
+      <text x="259" y="340" font-size="11" text-anchor="middle" fill="#5a6b80">3</text>
+      <text x="322" y="340" font-size="11" text-anchor="middle" fill="#5a6b80">4</text>
+      <text x="385" y="340" font-size="11" text-anchor="middle" fill="#5a6b80">5</text>
+      <text x="448" y="340" font-size="11" text-anchor="middle" fill="#5a6b80">6</text>
+      <text x="511" y="340" font-size="11" text-anchor="middle" fill="#5a6b80">7</text>
+      <text x="574" y="340" font-size="11" text-anchor="middle" fill="#5a6b80">8</text>
+      <text x="637" y="340" font-size="11" text-anchor="middle" fill="#5a6b80">9</text>
+      <text x="700" y="340" font-size="11" text-anchor="middle" fill="#5a6b80">10</text>
+      <text x="395" y="364" font-size="12" fill="#0b3d91" font-weight="700" text-anchor="middle">Degree of multiprogramming, n</text>
+
+      <!-- p = 0.8 -->
+      <polyline fill="none" stroke="#c92a2a" stroke-width="2.8"
+        points="70,320 133,264 196,219.2 259,183.4 322,154.7 385,131.8 448,113.4 511,98.7 574,87.0 637,77.6 700,70.1"/>
+      <!-- p = 0.5 -->
+      <polyline fill="none" stroke="#0b3d91" stroke-width="2.8"
+        points="70,320 133,180 196,110 259,75 322,57.5 385,48.8 448,44.4 511,42.2 574,41.1 637,40.5 700,40.2"/>
+      <!-- p = 0.2 -->
+      <polyline fill="none" stroke="#00a88a" stroke-width="2.8"
+        points="70,320 133,96 196,51.2 259,42.2 322,40.5 385,40.1 448,40.0 511,40.0 574,40.0 637,40.0 700,40.0"/>
+
+      <!-- legend -->
+      <line x1="480" y1="30" x2="510" y2="30" stroke="#c92a2a" stroke-width="3"/>
+      <text x="516" y="34" font-size="11.5" fill="#333">p = 0.8 (I/O-bound)</text>
+      <line x1="480" y1="50" x2="510" y2="50" stroke="#0b3d91" stroke-width="3"/>
+      <text x="516" y="54" font-size="11.5" fill="#333">p = 0.5</text>
+      <line x1="480" y1="70" x2="510" y2="70" stroke="#00a88a" stroke-width="3"/>
+      <text x="516" y="74" font-size="11.5" fill="#333">p = 0.2 (CPU-bound)</text>
+    </svg>
+    </div>
+    <figcaption>Figure 5.2 — CPU utilisation U = 1 − p<sup>n</sup> (illustrative plot). The knee of the curve shows
+      diminishing returns: beyond n ≈ 5–6 the marginal gain in U is negligible, while memory pressure and context-switch
+      overhead grow linearly. This is the quantitative basis for choosing the multiprogramming degree in a kernel
+      scheduler.</figcaption>
+  </figure>
+
+  <h3>5.4 Transfer Characteristic: Kernel Architecture vs Latency</h3>
+  <div class="tbl-wrap">
+  <table>
+    <caption>Table 5.1 — Qualitative transfer characteristic (illustrative, order-of-magnitude)</caption>
+    <thead><tr><th>Metric</th><th>Monolithic</th><th>Hybrid</th><th>Layered (n=5)</th><th>Microkernel (k=4)</th></tr></thead>
+    <tbody>
+      <tr><td>System-call latency (μs)</td><td>3.2</td><td>4.0</td><td>6.5</td><td>10.4</td></tr>
+      <tr><td>Relative slowdown vs monolithic</td><td>1.00×</td><td>1.25×</td><td>2.03×</td><td>3.25×</td></tr>
+      <tr><td>Mode switches / call</td><td>2</td><td>2–4</td><td>2</td><td>4</td></tr>
+      <tr><td>Context switches / call</td><td>0–1</td><td>0–1</td><td>0–1</td><td>2–3</td></tr>
+      <tr><td>Relative TCB size</td><td>100 %</td><td>45 %</td><td>—</td><td>3–8 %</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ==================== 6. EQUATIONS ==================== -->
+<section id="equations">
+  <h2><span class="num">6</span> Mathematical Model — Equations, Derivations &amp; Meaning</h2>
+
+  <h3>6.1 System-Call Latency (General Model)</h3>
+  <div class="eq">
+    <span class="lbl">Eq. 6.1 — General system-call latency</span>
+    <i>T</i><sub>sc</sub> = <i>T</i><sub>trap</sub> + <i>T</i><sub>dispatch</sub> + <i>T</i><sub>service</sub> + <i>T</i><sub>return</sub>
+  </div>
+  <ul class="varlist">
+    <li><i>T</i><sub>trap</sub> — hardware + software cost of entering kernel mode (saving PC/PSW/registers). Unit: <b>μs</b> or <b>ns</b>.</li>
+    <li><i>T</i><sub>dispatch</sub> — table lookup, privilege validation, argument copy-in. Unit: <b>μs</b>.</li>
+    <li><i>T</i><sub>service</sub> — the actual useful work performed by the kernel subsystem. Unit: <b>μs</b>.</li>
+    <li><i>T</i><sub>return</sub> — restoring context and executing the return-from-trap. Unit: <b>μs</b>.</li>
+  </ul>
+  <p><b>Applicability:</b> any kernel architecture. <b>Assumption:</b> no blocking, no pre-emption, single CPU.</p>
+
+  <h4>Conversion between cycles and time</h4>
+  <div class="eq">
+    <span class="lbl">Eq. 6.2 — Cycle-to-time conversion</span>
+    <i>T</i> = <i>N</i><sub>cycles</sub> / <i>f</i><sub>clk</sub>
+  </div>
+  <ul class="varlist">
+    <li><i>N</i><sub>cycles</sub> — number of CPU clock cycles consumed. Dimensionless.</li>
+    <li><i>f</i><sub>clk</sub> — CPU clock frequency in <b>Hz</b> (e.g. 3.0 × 10<sup>9</sup> Hz).</li>
+    <li><i>T</i> — time in <b>seconds</b>; multiply by 10<sup>6</sup> for μs, 10<sup>9</sup> for ns.</li>
+  </ul>
+  <p><b>Physical meaning:</b> this is the bridge between microarchitecture and OS timing. A mode switch costing
+    1500 cycles is 0.5 μs on a 3 GHz core but 7.5 μs on a 200 MHz embedded MCU — the same <em>code</em> gives
+    completely different OS behaviour.</p>
+
+  <h3>6.2 Layered Kernel Traversal</h3>
+  <div class="eq">
+    <span class="lbl">Eq. 6.3 — Latency through n layers</span>
+    <i>T</i><sub>layered</sub> = <i>T</i><sub>trap</sub> + Σ<sub><i>i</i>=1..<i>n</i></sub>( <i>T</i><sub>L,i</sub> + <i>T</i><sub>C,i</sub> ) + <i>T</i><sub>return</sub>
+  </div>
+  <p>If all layers are identical, this simplifies to:</p>
+  <div class="eq">
+    <i>T</i><sub>layered</sub> = <i>T</i><sub>trap</sub> + <i>n</i>(<i>T</i><sub>L</sub> + <i>T</i><sub>C</sub>) + <i>T</i><sub>return</sub>
+  </div>
+  <ul class="varlist">
+    <li><i>n</i> — number of kernel layers traversed (dimensionless integer).</li>
+    <li><i>T</i><sub>L</sub> — per-layer processing time (μs).</li>
+    <li><i>T</i><sub>C</sub> — per-layer interface-crossing overhead: parameter marshalling, bounds check, stack frame (μs).</li>
+  </ul>
+  <p><b>Derivation:</b> a strictly layered kernel forbids bypassing an intermediate layer, so a request to the deepest
+    layer must be unwrapped <i>n</i> times on the way down and re-wrapped <i>n</i> times on the way up. The sum is
+    therefore linear in <i>n</i>. <b>Limiting case:</b> as <i>n</i> → 1 the model degenerates to Eq. 6.1.</p>
+
+  <h3>6.3 Microkernel IPC Overhead</h3>
+  <div class="eq">
+    <span class="lbl">Eq. 6.4 — Microkernel system-call latency</span>
+    <i>T</i><sub>micro</sub> = <i>T</i><sub>trap</sub> + <i>k</i> · <i>T</i><sub>ipc</sub> + <i>T</i><sub>srv</sub> + <i>T</i><sub>return</sub>
+  </div>
+  <ul class="varlist">
+    <li><i>k</i> — number of IPC hops (message transfers) per request. For a simple send–reply pair, <i>k</i> = 2;
+      for a request that is forwarded through an intermediate server, <i>k</i> = 4, etc. Dimensionless.</li>
+    <li><i>T</i><sub>ipc</sub> — cost of one hop = trap + message copy + scheduler decision + address-space switch (μs).</li>
+    <li><i>T</i><sub>srv</sub> — actual service time inside the user-space server (μs).</li>
+  </ul>
+
+  <h4>Overhead ratio (slowdown factor)</h4>
+  <div class="eq">
+    <span class="lbl">Eq. 6.5 — Slowdown factor and IPC fraction</span>
+    <i>R</i> = <i>T</i><sub>micro</sub> / <i>T</i><sub>mono</sub> &nbsp;&nbsp;&nbsp;&nbsp;
+    η<sub>ipc</sub> = ( <i>k</i> · <i>T</i><sub>ipc</sub> / <i>T</i><sub>micro</sub> ) × 100 %
+  </div>
+  <ul class="varlist">
+    <li><i>R</i> — dimensionless slowdown factor; <i>R</i> &gt; 1 means the microkernel is slower.</li>
+    <li>η<sub>ipc</sub> — percentage of total latency that is pure architecture overhead (%).</li>
+  </ul>
+  <p><b>Design conclusion:</b> minimising <i>k</i> · <i>T</i><sub>ipc</sub> is the single most important microkernel
+    optimisation. Modern L4/seL4 kernels achieve <i>T</i><sub>ipc</sub> ≈ 100–400 cycles by using register-based short
+    messages and virtual-memory remapping instead of copying.</p>
+
+  <h3>6.4 Amdahl's Law Applied to Kernel Decomposition</h3>
+  <div class="eq">
+    <span class="lbl">Eq. 6.6 — Amdahl's Law</span>
+    <i>S</i> = 1 / [ (1 − <i>f</i>) + <i>f</i>/<i>s</i> ]
+  </div>
+  <p>When the offloaded fraction becomes <em>slower</em> by a factor <i>d</i> (i.e. <i>s</i> = 1/<i>d</i>), the overall
+     speedup relative to the original is:</p>
+  <div class="eq">
+    <i>S</i> = 1 / [ (1 − <i>f</i>) + <i>f</i> · <i>d</i> ]
+  </div>
+  <ul class="varlist">
+    <li><i>f</i> — fraction of original execution time spent in the code being moved (0 ≤ <i>f</i> ≤ 1).</li>
+    <li><i>d</i> — slowdown factor of that fraction after moving it to user space (d ≥ 1).</li>
+    <li><i>S</i> — net speedup (&lt; 1 means a net slowdown).</li>
+  </ul>
+  <p><b>Derivation:</b> original time normalised to 1. After the change, the unmodified fraction still takes
+    (1 − <i>f</i>), and the modified fraction takes <i>f</i> · <i>d</i>. Total new time = (1 − <i>f</i>) + <i>f</i><i>d</i>.
+    Speedup = old/new = 1 / [(1 − <i>f</i>) + <i>f</i><i>d</i>]. ∎</p>
+  <p><b>Limiting cases:</b> <i>f</i> = 0 → <i>S</i> = 1 (no change). <i>d</i> = 1 → <i>S</i> = 1 (no penalty).
+    <i>f</i> → 1 → <i>S</i> → 1/<i>d</i>. <b>Engineering meaning:</b> only the fraction of code that is
+    <em>actually moved</em> matters — moving 10 % of a kernel to user space at 5× slower costs only 1.4× overall,
+    but moving 70 % at 4× slower costs 3.1×.</p>
+
+  <h3>6.5 CPU Utilisation and Multiprogramming Degree</h3>
+  <div class="eq">
+    <span class="lbl">Eq. 6.7 — CPU utilisation</span>
+    <i>U</i> = 1 − <i>p</i><sup><i>n</i></sup>
+  </div>
+  <ul class="varlist">
+    <li><i>p</i> — probability that a given process is waiting for I/O at any instant (0 ≤ <i>p</i> &lt; 1). Dimensionless.</li>
+    <li><i>n</i> — degree of multiprogramming (number of resident processes). Integer ≥ 1.</li>
+    <li><i>U</i> — fraction of time the CPU is doing useful work (0 ≤ <i>U</i> ≤ 1).</li>
+  </ul>
+  <p><b>Assumptions:</b> processes are statistically independent; each is either running or waiting on I/O; the CPU
+    runs exactly one process at a time (single core); context-switch overhead is neglected.</p>
+  <p><b>Solving for the minimum n:</b></p>
+  <div class="eq">
+    <span class="lbl">Eq. 6.8 — Minimum degree of multiprogramming</span>
+    <i>n</i><sub>min</sub> = ⌈ ln(1 − <i>U</i>) / ln <i>p</i> ⌉
+  </div>
+  <p><b>Derivation:</b> U = 1 − p<sup>n</sup> ⇒ p<sup>n</sup> = 1 − U ⇒ n·ln p = ln(1 − U). Since 0 &lt; p &lt; 1,
+    ln p &lt; 0; dividing both sides by ln p reverses the inequality, giving n ≥ ln(1 − U)/ln p. Taking the ceiling
+    yields the minimum integer. ∎</p>
+  <p><b>Physical meaning:</b> the model shows the classic knee in Figure 5.2 — a few extra processes greatly improve
+    utilisation, but beyond the knee each extra process costs memory and scheduling overhead for almost no gain.</p>
+
+  <h3>6.6 Context-Switch and Mode-Switch Overhead Fraction</h3>
+  <div class="eq">
+    <span class="lbl">Eq. 6.9 — Overhead fraction</span>
+    <i>f</i><sub>cs</sub> = ( <i>N</i><sub>cs</sub> · <i>t</i><sub>cs</sub> / <i>T</i><sub>obs</sub> ) × 100 %
+  </div>
+  <ul class="varlist">
+    <li><i>N</i><sub>cs</sub> — number of context switches observed in the window (dimensionless).</li>
+    <li><i>t</i><sub>cs</sub> — time per context switch (μs).</li>
+    <li><i>T</i><sub>obs</sub> — observation window (same time unit as <i>t</i><sub>cs</sub>).</li>
+  </ul>
+  <p><b>Physical meaning:</b> in a microkernel with many IPC hops, <i>N</i><sub>cs</sub> rises sharply and this
+    fraction can exceed 30 %, which is visible as a drop in application throughput even if per-call latency looks
+    acceptable.</p>
+
+  <h3>6.7 Throughput</h3>
+  <div class="eq">
+    <span class="lbl">Eq. 6.10 — System-call throughput (single server, no queueing)</span>
+    <i>X</i> = 1 / <i>T</i><sub>sc</sub> &nbsp; [calls per second]
+  </div>
+  <p><b>Assumption:</b> requests arrive one at a time and are served back-to-back. If requests arrive concurrently,
+    queueing theory applies (Eq. 6.11).</p>
+
+  <h3>6.8 Little's Law for the Ready Queue</h3>
+  <div class="eq">
+    <span class="lbl">Eq. 6.11 — Little's Law</span>
+    <i>L</i> = λ · <i>W</i>
+  </div>
+  <ul class="varlist">
+    <li><i>L</i> — average number of processes in the ready queue (dimensionless).</li>
+    <li>λ — average arrival rate of ready processes (<b>processes per second</b>).</li>
+    <li><i>W</i> — average time a process spends waiting + running (<b>seconds</b>).</li>
+  </ul>
+  <p><b>Applicability:</b> any stable queueing system in steady state. It is architecture-agnostic and is used to size
+    scheduler run-queues and to predict response time under a given load.</p>
+
+  <h3>6.9 Reliability, Availability and Fault Isolation</h3>
+  <div class="eq">
+    <span class="lbl">Eq. 6.12 — Series reliability and MTBF</span>
+    <i>R</i><sub>sys</sub>(<i>t</i>) = Π<sub><i>i</i></sub> <i>R</i><sub><i>i</i></sub>(<i>t</i>) = exp( − Σ<sub><i>i</i></sub> λ<sub><i>i</i></sub> <i>t</i> ) , &nbsp; MTBF = 1 / Σ<sub><i>i</i></sub> λ<sub><i>i</i></sub>
+  </div>
+  <div class="eq">
+    <span class="lbl">Eq. 6.13 — Steady-state availability</span>
+    <i>A</i> = MTBF / ( MTBF + MTTR ) &nbsp;&nbsp;;&nbsp;&nbsp; Downtime per year = 8760 × (1 − <i>A</i>) hours
+  </div>
+  <ul class="varlist">
+    <li>λ<sub><i>i</i></sub> — failure rate of component <i>i</i> in <b>failures per hour</b> (assumed constant, exponential distribution).</li>
+    <li>MTBF, MTTR — in <b>hours</b>.</li>
+    <li><i>A</i> — dimensionless availability (0 to 1); often quoted as "nines" (0.999 = three nines).</li>
+  </ul>
+  <p><b>Derivation of Eq. 6.13:</b> in steady state the system alternates between an up-phase of average length MTBF
+    and a down-phase of average length MTTR. The long-run fraction of time spent up is therefore
+    MTBF/(MTBF + MTTR). ∎</p>
+  <p><b>Engineering meaning:</b> a microkernel does <em>not</em> reduce the failure <em>rate</em> of a driver — it
+    reduces the <em>MTTR</em>, because a crashed user-space server is restarted in milliseconds instead of rebooting
+    the machine. Availability, not reliability, is the real microkernel benefit.</p>
+
+  <h3>6.10 Formula Summary Table</h3>
+  <div class="tbl-wrap">
+  <table>
+    <caption>Table 6.1 — Quick-reference formula sheet</caption>
+    <thead><tr><th>#</th><th>Quantity</th><th>Equation</th><th>Unit</th></tr></thead>
+    <tbody>
+      <tr><td>6.1</td><td>System-call latency</td><td>T<sub>sc</sub> = T<sub>trap</sub> + T<sub>dispatch</sub> + T<sub>service</sub> + T<sub>return</sub></td><td>μs</td></tr>
+      <tr><td>6.2</td><td>Cycles → time</td><td>T = N<sub>cycles</sub> / f<sub>clk</sub></td><td>s</td></tr>
+      <tr><td>6.3</td><td>Layered traversal</td><td>T<sub>lay</sub> = T<sub>trap</sub> + n(T<sub>L</sub> + T<sub>C</sub>) + T<sub>ret</sub></td><td>μs</td></tr>
+      <tr><td>6.4</td><td>Microkernel latency</td><td>T<sub>micro</sub> = T<sub>trap</sub> + k·T<sub>ipc</sub> + T<sub>srv</sub> + T<sub>ret</sub></td><td>μs</td></tr>
+      <tr><td>6.5</td><td>Slowdown factor</td><td>R = T<sub>micro</sub> / T<sub>mono</sub></td><td>—</td></tr>
+      <tr><td>6.6</td><td>Amdahl (slowdown d)</td><td>S = 1 / [(1 − f) + f·d]</td><td>—</td></tr>
+      <tr><td>6.7</td><td>CPU utilisation</td><td>U = 1 − p<sup>n</sup></td><td>—</td></tr>
+      <tr><td>6.8</td><td>Minimum n</td><td>n<sub>min</sub> = ⌈ln(1 − U)/ln p⌉</td><td>—</td></tr>
+      <tr><td>6.9</td><td>Context-switch overhead</td><td>f<sub>cs</sub> = N<sub>cs</sub>·t<sub>cs</sub>/T<sub>obs</sub></td><td>—</td></tr>
+      <tr><td>6.10</td><td>Throughput</td><td>X = 1/T<sub>sc</sub></td><td>s<sup>−1</sup></td></tr>
+      <tr><td>6.11</td><td>Little's Law</td><td>L = λW</td><td>—</td></tr>
+      <tr><td>6.13</td><td>Availability</td><td>A = MTBF/(MTBF + MTTR)</td><td>—</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ==================== 7. SOLVED PROBLEMS ==================== -->
+<section id="numericals">
+  <h2><span class="num">7</span> Solved Numerical Problems</h2>
+
+  <!-- P1 -->
+  <div class="card">
+    <h4>Problem 1 (Easy) — Mode-switch cost in real time</h4>
+    <p><b>Question.</b> A kernel performs a trap-to-kernel transition that consumes 1500 CPU clock cycles.
+      The processor runs at <i>f</i><sub>clk</sub> = 3.0 GHz. Calculate the mode-switch time in nanoseconds.
+      If this transition occurs twice per system call and the system executes 200 000 system calls per second,
+      what percentage of one CPU core is consumed purely by mode switching?</p>
+
+    <p><b>Given:</b> <i>N</i><sub>cycles</sub> = 1500 cycles; <i>f</i><sub>clk</sub> = 3.0 × 10<sup>9</sup> Hz;
+      system calls per second <i>X</i> = 2 × 10<sup>5</sup> s<sup>−1</sup>; 2 transitions per call.</p>
+    <p><b>Required:</b> (i) <i>t</i><sub>ms</sub> in ns; (ii) CPU overhead percentage.</p>
+
+    <p><b>Formula:</b> Eq. 6.2 — <i>T</i> = <i>N</i><sub>cycles</sub> / <i>f</i><sub>clk</sub></p>
+    <p><b>Substitution (i):</b></p>
+    <div class="eq"><i>T</i> = 1500 / (3.0 × 10<sup>9</sup>) = 5.0 × 10<sup>−7</sup> s = 0.50 μs = <b>500 ns</b></div>
+
+    <p><b>Substitution (ii):</b> total mode-switch time per second = 2 × 200 000 × 500 ns
+      = 4 × 10<sup>5</sup> × 5 × 10<sup>−7</sup> s = 0.20 s.</p>
+    <div class="eq">Overhead = 0.20 s per 1.00 s of CPU time = <b>20 %</b></div>
+
+    <p><b>Answer:</b> Mode-switch time = 500 ns; mode switching alone consumes 20 % of the core.</p>
+    <p><b>Engineering interpretation:</b> a fifth of the CPU is spent merely changing privilege level, doing no useful
+      work. This is why high-frequency system-call workloads (network proxies, databases) benefit from techniques such
+      as io_uring, vDSO, or batching, which amortise the trap cost over many operations.</p>
+  </div>
+
+  <!-- P2 -->
+  <div class="card teal">
+    <h4>Problem 2 (Easy–Moderate) — Layered kernel system-call latency</h4>
+    <p><b>Question.</b> A strictly layered kernel has 5 software layers above the hardware. Trap entry costs
+      1.2 μs. Each layer contributes 0.6 μs of processing and 0.4 μs of interface-crossing overhead. The
+      return-from-trap costs 0.3 μs. Determine (a) the total system-call latency, and (b) the maximum sustainable
+      system-call throughput on a single core.</p>
+
+    <p><b>Given:</b> <i>n</i> = 5, <i>T</i><sub>trap</sub> = 1.2 μs, <i>T</i><sub>L</sub> = 0.6 μs,
+      <i>T</i><sub>C</sub> = 0.4 μs, <i>T</i><sub>return</sub> = 0.3 μs.</p>
+    <p><b>Required:</b> <i>T</i><sub>layered</sub> (μs) and <i>X</i> (calls/s).</p>
+
+    <p><b>Formula:</b> Eq. 6.3 — <i>T</i><sub>layered</sub> = <i>T</i><sub>trap</sub> + <i>n</i>(<i>T</i><sub>L</sub> + <i>T</i><sub>C</sub>) + <i>T</i><sub>return</sub></p>
+    <p><b>Substitution:</b></p>
+    <div class="eq">
+      <i>T</i><sub>layered</sub> = 1.2 + 5 × (0.6 + 0.4) + 0.3<br>
+      = 1.2 + 5.0 + 0.3 = <b>6.5 μs</b>
+    </div>
+    <p><b>Throughput (Eq. 6.10):</b></p>
+    <div class="eq"><i>X</i> = 1 / (6.5 × 10<sup>−6</sup>) = 1.538 × 10<sup>5</sup> ≈ <b>1.54 × 10<sup>5</sup> calls/s</b></div>
+
+    <p><b>Answer:</b> <i>T</i><sub>layered</sub> = 6.5 μs; <i>X</i> ≈ 153 800 system calls per second.</p>
+    <p><b>Engineering interpretation:</b> of the 6.5 μs, only 5 × 0.6 = 3.0 μs (46 %) is genuine work; the remaining
+      3.5 μs (54 %) is pure structural overhead (trap + crossings + return). Reducing the number of layers from 5 to 3
+      would save 2 × 1.0 = 2.0 μs — a 31 % latency reduction with no change in functionality.</p>
+  </div>
+
+  <!-- P3 -->
+  <div class="card orange">
+    <h4>Problem 3 (Moderate) — Monolithic vs microkernel: slowdown and IPC fraction</h4>
+    <p><b>Question.</b> The same file-read operation is implemented on two kernels.</p>
+    <ul class="tight">
+      <li><b>Monolithic:</b> trap = 0.5 μs, in-kernel service = 2.5 μs, return = 0.2 μs.</li>
+      <li><b>Microkernel:</b> trap = 0.5 μs, service inside the user-space file server = 2.5 μs, return = 0.2 μs,
+        and the request–reply exchange requires 4 IPC hops at 1.8 μs each.</li>
+    </ul>
+    <p>Compute (a) <i>T</i><sub>mono</sub>, (b) <i>T</i><sub>micro</sub>, (c) the slowdown factor <i>R</i>,
+      and (d) the percentage of microkernel latency that is pure IPC overhead.</p>
+
+    <p><b>Given:</b> <i>T</i><sub>trap</sub> = 0.5 μs; <i>T</i><sub>srv</sub> = 2.5 μs; <i>T</i><sub>ret</sub> = 0.2 μs;
+      <i>k</i> = 4; <i>T</i><sub>ipc</sub> = 1.8 μs.</p>
+    <p><b>Required:</b> <i>T</i><sub>mono</sub>, <i>T</i><sub>micro</sub>, <i>R</i>, η<sub>ipc</sub>.</p>
+
+    <p><b>Step 1 — Monolithic (Eq. 6.1):</b></p>
+    <div class="eq"><i>T</i><sub>mono</sub> = 0.5 + 2.5 + 0.2 = <b>3.2 μs</b></div>
+
+    <p><b>Step 2 — Microkernel (Eq. 6.4):</b></p>
+    <div class="eq">
+      <i>T</i><sub>micro</sub> = 0.5 + (4 × 1.8) + 2.5 + 0.2<br>
+      = 0.5 + 7.2 + 2.5 + 0.2 = <b>10.4 μs</b>
+    </div>
+
+    <p><b>Step 3 — Slowdown factor (Eq. 6.5):</b></p>
+    <div class="eq"><i>R</i> = 10.4 / 3.2 = <b>3.25×</b></div>
+
+    <p><b>Step 4 — IPC overhead fraction:</b></p>
+    <div class="eq">η<sub>ipc</sub> = (7.2 / 10.4) × 100 % = <b>69.23 %</b></div>
+
+    <p><b>Answer:</b> <i>T</i><sub>mono</sub> = 3.2 μs, <i>T</i><sub>micro</sub> = 10.4 μs, <i>R</i> = 3.25×,
+      η<sub>ipc</sub> = 69.23 %.</p>
+    <p><b>Engineering interpretation:</b> the useful work (2.5 μs) is identical in both designs; the entire
+      7.2 μs penalty is architectural. Note that reducing <i>k</i> from 4 to 2 (a single direct send–reply) would cut
+      <i>T</i><sub>micro</sub> to 0.5 + 3.6 + 2.5 + 0.2 = 6.8 μs, i.e. <i>R</i> = 2.13× — a 35 % improvement from
+      protocol redesign alone. This is exactly the optimisation that L4 and seL4 pursue.</p>
+  </div>
+
+  <!-- P4 -->
+  <div class="card purple">
+    <h4>Problem 4 (Moderate — GATE-style) — Degree of multiprogramming</h4>
+    <p><b>Question.</b> In a multiprogramming system the average fraction of time a process spends waiting for I/O is
+      <i>p</i> = 0.2. Using the standard model <i>U</i> = 1 − <i>p</i><sup><i>n</i></sup>, find the minimum number of
+      processes that must be resident in memory so that CPU utilisation is at least 95 %. What is the actual
+      utilisation achieved with that value of <i>n</i>?</p>
+
+    <p><b>Given:</b> <i>p</i> = 0.2; required <i>U</i> ≥ 0.95.</p>
+    <p><b>Required:</b> <i>n</i><sub>min</sub> (integer) and the resulting <i>U</i>.</p>
+
+    <p><b>Formula (Eq. 6.8):</b> <i>n</i><sub>min</sub> = ⌈ ln(1 − <i>U</i>) / ln <i>p</i> ⌉</p>
+    <p><b>Substitution:</b></p>
+    <div class="eq">
+      <i>n</i><sub>min</sub> = ⌈ ln(0.05) / ln(0.2) ⌉ = ⌈ (−2.9957) / (−1.6094) ⌉ = ⌈ 1.8614 ⌉ = <b>2</b>
+    </div>
+
+    <p><b>Verification:</b></p>
+    <div class="eq">
+      <i>n</i> = 1 : <i>U</i> = 1 − 0.2 = 0.80 = 80 % &nbsp;&lt; 95 % ✘<br>
+      <i>n</i> = 2 : <i>U</i> = 1 − 0.2<sup>2</sup> = 1 − 0.04 = 0.96 = <b>96 %</b> ✔
+    </div>
+
+    <p><b>Answer:</b> <i>n</i><sub>min</sub> = 2 processes, giving <i>U</i> = 96 %.</p>
+    <p><b>Engineering interpretation:</b> because 80 % of each process's time is CPU-bound, only two resident
+      processes are needed to keep the CPU busy 96 % of the time. Adding a third process raises <i>U</i> only to
+      99.2 % — a gain of 3.2 percentage points for 50 % more memory pressure. This is the quantitative justification
+      for keeping the multiprogramming degree near the knee of the curve.</p>
+
+    <div class="box tip">
+      <b class="lbl">Shortcut (GATE)</b>
+      For <i>U</i> = 95 % the required (1 − <i>U</i>) = 0.05. Ask: "to what power must <i>p</i> be raised to get
+      below 0.05?" For <i>p</i> = 0.2: 0.2<sup>1</sup> = 0.2, 0.2<sup>2</sup> = 0.04 ≤ 0.05. Answer = 2.
+      Always verify by direct substitution — it is faster and safer than logarithms under exam pressure.
+    </div>
+  </div>
+
+  <!-- P5 -->
+  <div class="card">
+    <h4>Problem 5 (Difficult) — Amdahl's Law and availability trade-off</h4>
+    <p><b>Question (two parts).</b></p>
+    <p><b>(a)</b> A monolithic kernel spends 60 % of its execution time in device drivers and file-system code.
+      A redesign moves exactly those components into user-space servers, where they execute 3× more slowly because of
+      IPC. Everything else runs at unchanged speed. What is the net speedup (or slowdown) of the system?</p>
+    <p><b>(b)</b> In the monolithic system, any driver fault crashes the machine; MTBF = 2000 hours and repair takes
+      MTTR = 4 hours. In the microkernel redesign, a driver-server fault only requires restarting that server:
+      MTBF remains 2000 hours but MTTR falls to 0.1 hours. Compute the availability and annual downtime for both,
+      and the improvement factor.</p>
+
+    <h4>Part (a) — Amdahl's Law</h4>
+    <p><b>Given:</b> <i>f</i> = 0.60 (fraction moved), <i>d</i> = 3 (slowdown of that fraction).</p>
+    <p><b>Formula (Eq. 6.6):</b> <i>S</i> = 1 / [(1 − <i>f</i>) + <i>f</i> · <i>d</i>]</p>
+    <div class="eq">
+      <i>S</i> = 1 / [(1 − 0.60) + (0.60 × 3)] = 1 / [0.40 + 1.80] = 1 / 2.20 = <b>0.4545</b>
+    </div>
+    <p><b>Answer (a):</b> <i>S</i> = 0.4545, i.e. the system is <b>2.2× slower</b> (a net slowdown, not a speedup).</p>
+    <p><b>Interpretation:</b> only 40 % of the code keeps its speed, but the 60 % that got slower now dominates the
+      total time. This is precisely the trade-off that drove Windows NT and XNU toward hybrid designs.</p>
+
+    <h4>Part (b) — Availability</h4>
+    <p><b>Monolithic (Eq. 6.13):</b></p>
+    <div class="eq">
+      <i>A</i><sub>mono</sub> = 2000 / (2000 + 4) = 2000 / 2004 = 0.998004<br>
+      Downtime/year = 8760 × (1 − 0.998004) = 8760 × 0.001996 = <b>17.49 hours</b>
+    </div>
+    <p><b>Microkernel (Eq. 6.13):</b></p>
+    <div class="eq">
+      <i>A</i><sub>micro</sub> = 2000 / (2000 + 0.1) = 2000 / 2000.1 = 0.999950<br>
+      Downtime/year = 8760 × (1 − 0.999950) = 8760 × 5.0 × 10<sup>−5</sup> = <b>0.438 hours</b>
+    </div>
+    <p><b>Improvement factor:</b></p>
+    <div class="eq">
+      Improvement = (1 − <i>A</i><sub>mono</sub>) / (1 − <i>A</i><sub>micro</sub>) = 0.001996 / 0.000050 = <b>≈ 39.9×</b>
+    </div>
+
+    <p><b>Answer (b):</b> <i>A</i><sub>mono</sub> = 0.998004 (17.49 h/yr down);
+      <i>A</i><sub>micro</sub> = 0.999950 (0.438 h/yr down); ≈ <b>39.9× less downtime</b>.</p>
+    <p><b>Engineering interpretation:</b> the microkernel does not prevent the driver from failing — the failure rate
+      is unchanged. It simply converts a 4-hour machine outage into a 0.1-hour process restart. This is why
+      fault-isolation architecture is mandated in automotive (ISO 26262), avionics (DO-178C) and telecom
+      (five-nines carrier-grade) systems. Note the practical caveat: the model assumes perfect server restart with no
+      cascading failures and no state loss.</p>
+  </div>
+</section>
+
+<!-- ==================== 8. GATE PREP ==================== -->
+<section id="gate">
+  <h2><span class="num">8</span> GATE Examination Preparation — 12 Practice MCQs</h2>
+  <div class="box warn">
+    <b class="lbl">Disclaimer</b>
+    The questions below are <b>original practice problems</b> written in GATE style. They are <em>not</em> actual
+    previous-year GATE questions, and no source attribution is claimed. Difficulty labels are indicative.
+  </div>
+
+  <!-- Q1 -->
+  <div class="mcq">
+    <p class="qhead"><span class="badge easy">Easy</span> &nbsp;Q1. In which kernel architecture do device drivers and the
+      file system normally execute as user-space server processes that communicate by message passing?</p>
+    <ol>
+      <li>Monolithic kernel</li>
+      <li>Layered kernel</li>
+      <li>Microkernel</li>
+      <li>Modular monolithic kernel</li>
+    </ol>
+    <div class="ansbox">
+      <span class="key">Correct answer: (C) Microkernel.</span><br>
+      The defining property of a microkernel is that only IPC, minimal scheduling and basic address-space management
+      reside in kernel mode; everything else — including drivers and file systems — is a user-space server reached via
+      IPC messages. (A) and (D) keep these in kernel mode; (B) is about internal layering, not about privilege level.
+    </div>
+  </div>
+
+  <!-- Q2 -->
+  <div class="mcq">
+    <p class="qhead"><span class="badge easy">Easy</span> &nbsp;Q2. The Linux kernel is best classified as:</p>
+    <ol>
+      <li>A pure microkernel</li>
+      <li>A monolithic kernel with dynamically loadable modules</li>
+      <li>A strictly layered kernel</li>
+      <li>An exokernel</li>
+    </ol>
+    <div class="ansbox">
+      <span class="key">Correct answer: (B).</span><br>
+      Loadable kernel modules run in kernel mode within the same address space as the core kernel, so they do not
+      provide fault isolation. Linux is therefore <em>modular monolithic</em>, not a microkernel. Option (C) is
+      incorrect because Linux layers are not strict — cross-layer calls are common.
+    </div>
+  </div>
+
+  <!-- Q3 -->
+  <div class="mcq">
+    <p class="qhead"><span class="badge moderate">Moderate</span> &nbsp;Q3. In the classical layered operating-system
+      design, layer 0 is:</p>
+    <ol>
+      <li>The user interface / shell</li>
+      <li>The file system</li>
+      <li>The hardware</li>
+      <li>The process scheduler</li>
+    </ol>
+    <div class="ansbox">
+      <span class="key">Correct answer: (C) The hardware.</span><br>
+      Layers are numbered from the hardware upward: layer 0 is the hardware itself, and the highest layer (layer N−1)
+      is the user interface. Some textbooks number in the opposite direction, so always read the convention stated in
+      the question. This is a classic GATE distractor.
+    </div>
+  </div>
+
+  <!-- Q4 -->
+  <div class="mcq">
+    <p class="qhead"><span class="badge moderate">Moderate</span> &nbsp;Q4. A system call in a layered kernel passes
+      through <i>n</i> = 6 layers. Trap entry takes 1.0 μs, each layer consumes 0.5 μs of processing and 0.3 μs of
+      interface-crossing overhead, and the return-from-trap takes 0.2 μs. The total system-call latency is:</p>
+    <ol>
+      <li>4.8 μs</li>
+      <li>6.0 μs</li>
+      <li>6.8 μs</li>
+      <li>5.0 μs</li>
+    </ol>
+    <div class="ansbox">
+      <span class="key">Correct answer: (B) 6.0 μs.</span><br>
+      T = T<sub>trap</sub> + n(T<sub>L</sub> + T<sub>C</sub>) + T<sub>ret</sub>
+      = 1.0 + 6(0.5 + 0.3) + 0.2 = 1.0 + 4.8 + 0.2 = <b>6.0 μs</b>.<br>
+      <b>Distractor analysis:</b> (A) 4.8 μs forgets trap and return. (D) 5.0 μs counts only layer processing. (C) 6.8 μs
+      double-counts one crossing.
+    </div>
+  </div>
+
+  <!-- Q5 -->
+  <div class="mcq">
+    <p class="qhead"><span class="badge moderate">Moderate</span> &nbsp;Q5. Which of the following is <b>NOT</b> an
+      advantage of a microkernel design?</p>
+    <ol>
+      <li>Better fault isolation between OS services</li>
+      <li>Smaller trusted computing base</li>
+      <li>Lower system-call latency</li>
+      <li>Easier porting to new hardware platforms</li>
+    </ol>
+    <div class="ansbox">
+      <span class="key">Correct answer: (C) Lower system-call latency.</span><br>
+      Microkernels typically have <em>higher</em> system-call latency because each service request becomes multiple
+      IPC messages, each requiring traps and address-space switches. (A), (B) and (D) are the three canonical
+      microkernel advantages.
+    </div>
+  </div>
+
+  <!-- Q6 -->
+  <div class="mcq">
+    <p class="qhead"><span class="badge moderate">Moderate</span> &nbsp;Q6. Which statement about mode switches and
+      context switches is correct?</p>
+    <ol>
+      <li>A mode switch always changes the running process</li>
+      <li>Every context switch involves a mode switch, but not every mode switch causes a context switch</li>
+      <li>Mode switch and context switch are two names for the same operation</li>
+      <li>A context switch occurs only when a process performs I/O</li>
+    </ol>
+    <div class="ansbox">
+      <span class="key">Correct answer: (B).</span><br>
+      A context switch must enter kernel mode to save/restore the PCB, so it necessarily includes a mode switch.
+      However, a timer interrupt that only services the clock and returns performs two mode switches without changing
+      the running thread. (A) and (C) are the most common misconceptions; (D) is false — pre-emption and blocking on a
+      semaphore also cause context switches.
+    </div>
+  </div>
+
+  <!-- Q7 -->
+  <div class="mcq">
+    <p class="qhead"><span class="badge moderate">Moderate</span> &nbsp;Q7. A client process requests a service from a
+      user-space file server in a microkernel, and the server returns the reply. What is the minimum number of
+      user↔kernel mode transitions required?</p>
+    <ol><li>1</li><li>2</li><li>3</li><li>4</li></ol>
+    <div class="ansbox">
+      <span class="key">Correct answer: (D) 4.</span><br>
+      (1) Client user → kernel (send request trap). (2) Kernel → server user (deliver message, resume server).
+      (3) Server user → kernel (send reply trap). (4) Kernel → client user (deliver reply, resume client).
+      Each of the four is a mode transition; there are 2 traps and 2 scheduling decisions.
+      <b>Common error:</b> answering 2 by counting only traps and forgetting the two kernel→user returns.
+    </div>
+  </div>
+
+  <!-- Q8 -->
+  <div class="mcq">
+    <p class="qhead"><span class="badge moderate">Moderate</span> &nbsp;Q8. Using the model <i>U</i> = 1 − <i>p</i><sup><i>n</i></sup>
+      with <i>p</i> = 0.1, what is the minimum degree of multiprogramming for CPU utilisation ≥ 99 %?</p>
+    <ol><li>1</li><li>2</li><li>3</li><li>10</li></ol>
+    <div class="ansbox">
+      <span class="key">Correct answer: (B) 2.</span><br>
+      n<sub>min</sub> = ⌈ln(1 − 0.99)/ln(0.1)⌉ = ⌈ln(0.01)/ln(0.1)⌉ = ⌈(−4.6052)/(−2.3026)⌉ = ⌈2.0⌉ = 2.<br>
+      <b>Verification:</b> n = 1 → U = 0.90 (90 %, insufficient). n = 2 → U = 1 − 0.01 = 0.99 = 99 % ✔<br>
+      <b>Distractor (D)</b> 10 is the naive "0.1<sup>10</sup>" confusion; <b>(A)</b> forgets that n = 1 gives only 90 %.
+    </div>
+  </div>
+
+  <!-- Q9 -->
+  <div class="mcq">
+    <p class="qhead"><span class="badge difficult">Difficult</span> &nbsp;Q9. A monolithic kernel executes 70 % of its
+      time in code that a redesign moves into user-space servers. Because of IPC, that code runs 4× more slowly.
+      The remaining 30 % is unaffected. The net speedup of the system is approximately:</p>
+    <ol><li>0.32 (3.1× slowdown)</li><li>1.00 (no change)</li><li>1.43 (1.43× speedup)</li><li>2.80 (2.8× speedup)</li></ol>
+    <div class="ansbox">
+      <span class="key">Correct answer: (A) 0.32, a 3.1× slowdown.</span><br>
+      Amdahl's Law with slowdown: S = 1/[(1 − f) + f·d] = 1/[(0.30) + (0.70 × 4)] = 1/(0.30 + 2.80) = 1/3.10 = 0.3226.<br>
+      <b>Distractor (D)</b> 2.80 is the value of the denominator — a classic slip. <b>(C)</b> is the result of using
+      s = 4 instead of d = 4 (i.e. mistakenly assuming a speedup). <b>(B)</b> would require d = 1.
+    </div>
+  </div>
+
+  <!-- Q10 -->
+  <div class="mcq">
+    <p class="qhead"><span class="badge moderate">Moderate</span> &nbsp;Q10. Which of the following is a real-world
+      example of a <b>hybrid</b> kernel?</p>
+    <ol><li>MINIX 3</li><li>QNX Neutrino</li><li>Windows NT</li><li>L4 microkernel</li></ol>
+    <div class="ansbox">
+      <span class="key">Correct answer: (C) Windows NT (and its descendants).</span><br>
+      Windows NT was architecturally designed as a microkernel but moved performance-critical components — the
+      window manager, graphics drivers and file-system drivers — back into kernel mode, which makes it a hybrid.
+      MINIX 3, QNX Neutrino and L4 are all genuine microkernels. macOS XNU is another hybrid example.
+    </div>
+  </div>
+
+  <!-- Q11 -->
+  <div class="mcq">
+    <p class="qhead"><span class="badge moderate">Moderate</span> &nbsp;Q11. The primary mechanism by which a
+      microkernel achieves better fault isolation than a monolithic kernel is:</p>
+    <ol>
+      <li>It uses less physical memory</li>
+      <li>It performs IPC faster than a function call</li>
+      <li>An OS service that faults cannot corrupt kernel memory, because it runs in a separate address space at user privilege</li>
+      <li>It eliminates context switches entirely</li>
+    </ol>
+    <div class="ansbox">
+      <span class="key">Correct answer: (C).</span><br>
+      Hardware memory protection (page tables + privilege rings) confines a faulty user-space server to its own address
+      space. A write to an arbitrary address triggers a page fault instead of silently corrupting kernel data.
+      (B) is false — IPC is slower than a function call. (D) is false — microkernels typically have more context
+      switches, not fewer.
+    </div>
+  </div>
+
+  <!-- Q12 -->
+  <div class="mcq">
+    <p class="qhead"><span class="badge difficult">Difficult</span> &nbsp;Q12. In a microkernel, a service request
+      requires <i>k</i> = 6 IPC hops, each costing 2.0 μs. Trap entry is 0.8 μs, the server's actual work is 4.0 μs,
+      and the return is 0.2 μs. What percentage of the total latency is pure IPC overhead?</p>
+    <ol><li>58.8 %</li><li>70.6 %</li><li>82.4 %</li><li>46.5 %</li></ol>
+    <div class="ansbox">
+      <span class="key">Correct answer: (B) 70.6 %.</span><br>
+      T<sub>micro</sub> = 0.8 + (6 × 2.0) + 4.0 + 0.2 = 0.8 + 12.0 + 4.0 + 0.2 = 17.0 μs.<br>
+      IPC time = 12.0 μs ⇒ η<sub>ipc</sub> = (12.0 / 17.0) × 100 % = 70.59 % ≈ 70.6 %.<br>
+      <b>Distractor (A)</b> 58.8 % = 10/17 (subtracting trap and return incorrectly).
+      <b>(C)</b> uses 14/17 (counting trap + return as IPC). <b>(D)</b> uses 12/25.8 (wrong denominator).
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 9. INTERVIEW PREP ==================== -->
+<section id="interview">
+  <h2><span class="num">9</span> Core Electronics &amp; Embedded Systems Interview Preparation</h2>
+  <p class="small">
+    Click any question to reveal a model answer. Answers are written for roles in embedded firmware, VLSI/SoC
+    validation, FPGA, hardware testing, and electronics R&amp;D.
+  </p>
+
+  <details class="acc">
+    <summary>Q1. Why is a microkernel considered safer than a monolithic kernel, and what is the cost?</summary>
+    <div class="acc-body">
+      <b>Safety:</b> the microkernel's trusted computing base is tiny (typically 10–15 kLOC vs millions), so the
+      attack surface and the number of code paths that can violate a security policy are drastically reduced.
+      Additionally, drivers and file systems run as unprivileged user processes in their own address spaces, so a
+      buffer overflow in a network driver cannot write into kernel memory — the MMU raises a page fault instead of
+      silently corrupting the scheduler.
+      <br><b>Cost:</b> every service request must cross a privilege boundary twice and usually involves message
+      copying. Measured slowdowns of 3–10× on system-call microbenchmarks are typical. This is why safety-critical
+      systems (QNX in automotive, seL4 in defence) accept the cost while general-purpose desktop systems do not.
+      <br><b>Follow-up:</b> "Can the cost be reduced?" — Yes: register-based short messages, virtual-memory message
+      remapping instead of copying (L4/seL4), and shared-memory data paths with the kernel handling only the control
+      handshake.
+    </div>
+  </details>
+
+  <details class="acc">
+    <summary>Q2. What exactly happens, cycle by cycle, when a user program executes a system call on an ARM Cortex-A?</summary>
+    <div class="acc-body">
+      <ol class="tight">
+        <li>User code loads the syscall number into <code>x8</code> and arguments into <code>x0–x5</code>, then
+          executes <code>SVC #0</code> (Supervisor Call).</li>
+        <li>The core takes an exception: it saves the return address in <code>ELR_EL1</code>, the processor state in
+          <code>SPSR_EL1</code>, masks interrupts as configured, and vectors to the synchronous exception handler.</li>
+        <li>The handler pushes the general-purpose registers and the FP/SIMD state onto the kernel stack (or relies on
+          lazy FP save).</li>
+        <li>The syscall number indexes the syscall table; the handler validates user pointers.</li>
+        <li>The service routine executes.</li>
+        <li>Return value placed in <code>x0</code>; registers restored; <code>ERET</code> returns to EL0 and resumes
+          the user instruction after the SVC.</li>
+      </ol>
+      <b>Practical numbers:</b> the raw exception entry/exit on a modern Cortex-A is roughly 30–100 cycles; the
+      complete round trip including dispatch and validation is typically 0.3–1 μs at ~1.5 GHz.
+      <br><b>Follow-up:</b> "How would you measure it?" — Use <code>CNTVCT_EL0</code> or the PMU cycle counter around
+      a bare <code>getpid()</code> call in a tight loop, subtracting loop overhead.
+    </div>
+  </details>
+
+  <details class="acc">
+    <summary>Q3. Linux has loadable kernel modules. Does that make it a microkernel? Justify your answer.</summary>
+    <div class="acc-body">
+      <b>No.</b> The decisive criterion is not <em>when</em> code is loaded but <em>where</em> it executes. An LKM is
+      linked into the kernel's own address space and executes at ring 0 with full privilege. A fault in a module
+      therefore corrupts kernel state and typically panics the machine — exactly the failure mode a microkernel is
+      designed to prevent.
+      <br>Linux is properly described as a <b>modular monolithic</b> kernel. Modules give you the <em>extensibility</em>
+      benefit of a microkernel (load a driver without rebuilding the kernel) without the <em>isolation</em> benefit.
+      <br><b>Follow-up:</b> "How could you get isolation on Linux?" — Use userspace drivers via UIO or VFIO, or move
+      the service into a separate process (e.g. FUSE for file systems, DPDK for networking).
+    </div>
+  </details>
+
+  <details class="acc">
+    <summary>Q4. How does kernel architecture affect worst-case interrupt latency in a real-time embedded system?</summary>
+    <div class="acc-body">
+      Worst-case interrupt latency = longest period during which the CPU cannot service a pending interrupt. In a
+      monolithic kernel this is bounded by the longest <em>non-preemptible critical section</em> — a large kernel
+      contains many such sections (long driver loops, spinlocks), so the bound is hard to compute and often large.
+      <br>A microkernel (QNX Neutrino, seL4) or a properly configured RTOS keeps critical sections tiny and bounded,
+      which makes the worst case <em>analytically provable</em> — required for DO-178C / ISO 26262 certification.
+      <br>Linux's <code>PREEMPT_RT</code> patch set attacks the same problem by converting spinlocks to sleeping
+      mutexes and threading interrupt handlers, reducing worst-case latency from milliseconds to tens of microseconds.
+      <br><b>Practical measurement:</b> <code>cyclictest</code> reports min/avg/max latency; the max is the number that
+      matters for a control loop, not the average.
+    </div>
+  </details>
+
+  <details class="acc">
+    <summary>Q5. Design scenario: you must build a medical infusion pump. Which kernel architecture would you choose and why?</summary>
+    <div class="acc-body">
+      <b>Recommendation: a certified microkernel or a safety-certified RTOS</b> (e.g. seL4, QNX Neutrino, or a
+      pre-certified RTOS such as VxWorks 653 / Zephyr with the relevant safety package).
+      <br><b>Reasoning:</b>
+      <ul class="tight">
+        <li><b>Fault isolation</b> — the UI process, the network/telemetry process and the motor-control process must
+          be independently failable. A crash in the Bluetooth stack must not stop the pump.</li>
+        <li><b>Certifiability</b> — IEC 62304 / ISO 14971 require a small, verifiable safety-critical core. A 20 kLOC
+          microkernel with a formal proof (seL4) is tractable; a 20 MLOC monolithic kernel is not.</li>
+        <li><b>Bounded latency</b> — the dosing loop has a hard deadline; worst-case interrupt latency must be provable.</li>
+      </ul>
+      <b>Trade-off accepted:</b> higher IPC overhead and a steeper learning curve, in exchange for isolation and
+      certifiability. For a consumer toy the answer would be the opposite — a monolithic RTOS would be cheaper.
+    </div>
+  </details>
+
+  <details class="acc">
+    <summary>Q6. Your embedded board crashes with a kernel panic only when the Ethernet cable is plugged in. How do you debug this?</summary>
+    <div class="acc-body">
+      <ol class="tight">
+        <li><b>Reproduce deterministically</b> and capture the panic message, stack trace and register dump
+          (serial console / pstore / ramoops).</li>
+        <li><b>Isolate the code path:</b> the trigger is link-up, which fires the PHY interrupt → MAC driver ISR →
+          NAPI poll → network stack. Disable components one at a time (<code>ifconfig down</code>, unload the driver
+          module, mask the IRQ in the interrupt controller).</li>
+        <li><b>Check for the classic causes:</b> DMA buffer not cache-line aligned; missing cache flush/invalidate
+          around DMA (coherency bug); driver accessing registers before the clock/power domain is enabled; interrupt
+          storm causing stack overflow; NULL pointer in the link-up callback.</li>
+        <li><b>Use hardware tools:</b> a logic analyser or oscilloscope on the MDIO/MDC lines to confirm register
+          accesses, and a JTAG debugger to inspect the faulting address.</li>
+        <li><b>Confirm the fix</b> under stress (iperf, repeated plug/unplug, temperature cycling).</li>
+      </ol>
+      <b>Interview point:</b> state clearly that a driver bug in a monolithic kernel panics the whole system, which is
+      why this class of bug is expensive in the field — and why some systems move networking into user space
+      (DPDK, or a microkernel network server).
+    </div>
+  </details>
+
+  <details class="acc">
+    <summary>Q7. How does the MMU/TLB interact with kernel architecture, and why does this matter for performance?</summary>
+    <div class="acc-body">
+      Every address-space change requires the TLB to be invalidated or tagged. In a monolithic kernel, a system call
+      stays in the same address space, so the TLB is untouched — cheap. In a microkernel, each IPC hop may switch
+      address spaces, forcing TLB entries for the outgoing server to be evicted or tagged.
+      <br><b>Hardware mitigations:</b> Address Space Identifiers (ASID on ARM, PCID on x86) tag TLB entries so a switch
+      does not require a full flush; global pages keep kernel mappings resident; large pages (2 MB / 1 GB) reduce the
+      number of entries needed.
+      <br><b>Cost of a full TLB flush:</b> on a 64-entry L1 dTLB with a moderate working set, a flush can cost hundreds
+      to thousands of cycles of refill traffic. Doing this on every IPC hop is exactly what makes naive microkernels
+      slow.
+      <br><b>Interview point:</b> microkernel IPC performance is as much a memory-management problem as an IPC problem
+      — this is why L4's message registers and seL4's capability-based mapping are so effective.
+    </div>
+  </details>
+
+  <details class="acc">
+    <summary>Q8. Explain the difference between a mode switch and a context switch, and quantify both on a modern SoC.</summary>
+    <div class="acc-body">
+      <b>Mode switch:</b> the CPU privilege level changes (EL0 ↔ EL1 on ARM; ring 3 ↔ ring 0 on x86). The running
+      thread is unchanged; only the saved status register changes. Cost: typically <b>30–100 cycles</b> for the raw
+      hardware transition, plus the handler prologue.
+      <br><b>Context switch:</b> the complete saved state of one thread is replaced by another's — general registers,
+      stack pointer, PC, MMU base register, FP/SIMD state, and any kernel bookkeeping (scheduler queues, statistics).
+      Cost: typically <b>1000–5000 cycles</b> (≈0.3–2 μs at 2.5 GHz), rising further when the new thread has a cold
+      cache and TLB.
+      <br><b>Relationship:</b> a context switch always contains a mode switch; a mode switch does not imply a context
+      switch.
+      <br><b>Measurement tip:</b> use <code>perf stat -e context-switches</code> and the PMU cycle counter; report
+      both the instruction count and the wall-clock time, because cache effects dominate the difference.
+    </div>
+  </details>
+
+  <details class="acc">
+    <summary>Q9. In a simulation or lab environment, how would you experimentally compare monolithic and microkernel system-call latency?</summary>
+    <div class="acc-body">
+      <ol class="tight">
+        <li><b>Choose comparable primitives.</b> Monolithic: Linux <code>read()</code> on a tmpfs file.
+          Microkernel: the same operation on MINIX 3 or on QNX via its message API.</li>
+        <li><b>Use a proper harness.</b> <code>lmbench</code>'s <code>lat_syscall</code>, or a custom loop using
+          <code>clock_gettime(CLOCK_MONOTONIC_RAW)</code> / <code>CNTVCT_EL0</code> around 10<sup>5</sup>–10<sup>6</sup>
+          iterations. Discard warm-up iterations.</li>
+        <li><b>Control the environment:</b> pin to one core (<code>taskset</code>), disable frequency scaling
+          (<code>cpufreq governor = performance</code>), disable interrupts on other cores where possible, and run
+          each configuration at least five times.</li>
+        <li><b>Report a distribution, not a mean.</b> Give min / median / 99th percentile and the standard deviation.
+          Worst case matters more than average for real-time analysis.</li>
+        <li><b>Cross-check against the model.</b> Compare the measured difference with Eq. 6.4:
+          ΔT = k·T<sub>ipc</sub> − (in-kernel service overhead). A large unexplained gap suggests cache/TLB effects
+          or scheduler interference rather than pure IPC cost.</li>
+      </ol>
+      <b>Pitfall to mention:</b> never compare a microkernel running under QEMU with a native monolithic kernel —
+      emulation dominates the measurement and invalidates the comparison.
+    </div>
+  </details>
+
+  <details class="acc">
+    <summary>Q10. Why do hybrid kernels exist? Give a concrete engineering example.</summary>
+    <div class="acc-body">
+      A hybrid kernel keeps the microkernel's <em>structural</em> discipline (a small core handling scheduling, IPC
+      and traps, with a clean interface to subsystems) while deliberately violating its <em>isolation</em> rule for
+      components where the IPC cost is unacceptable.
+      <br><b>Concrete example — Windows NT:</b> the graphics device driver and the window manager were moved from
+      user space into kernel mode before shipping NT 3.1, because the per-frame IPC cost destroyed interactive
+      graphics performance. The result is a design with a microkernel-like core but a large kernel-mode footprint.
+      <br><b>macOS XNU:</b> Mach provides IPC and scheduling, BSD provides the POSIX/UNIX layer, and I/O Kit provides
+      an object-oriented driver framework — all in one kernel-mode address space for speed.
+      <br><b>General engineering principle:</b> purity loses to measured performance. The correct question is never
+      "which architecture is theoretically best?" but "what is the cost of an IPC hop in this workload, and how
+      many hops does a typical operation require?"
+    </div>
+  </details>
+
+  <details class="acc">
+    <summary>Q11. How would you evaluate the reliability benefit of a fault-isolated kernel for a telecom line card that must deliver 99.999 % availability?</summary>
+    <div class="acc-body">
+      <b>Target:</b> 99.999 % ("five nines") = 5.26 minutes of downtime per year.
+      <br><b>Step 1 — Model the monolithic baseline.</b> MTBF = 3000 h, MTTR = 6 h (full card replacement/reboot):
+      A = 3000/3006 = 0.998004 → 17.5 h/yr down. Fails the target by a factor of ~200.
+      <br><b>Step 2 — Model fault isolation.</b> Keep MTBF but reduce MTTR to 30 s (0.0083 h) via automatic process
+      restart on the faulting service: A = 3000/3000.0083 = 0.9999972 → 0.024 h/yr = 1.5 minutes/yr. Meets five nines.
+      <br><b>Step 3 — Add redundancy for the residual.</b> Hot-standby control cards plus hitless software upgrade give
+      the remaining margin for planned maintenance downtime, which the availability formula above ignores.
+      <br><b>Step 4 — Validate empirically.</b> Fault injection (a driver deliberately dereferences NULL, or the ISR
+      is starved) and measure the actual detection + restart time, not the theoretical MTTR.
+      <br><b>Key insight to state in the interview:</b> architecture improves <em>availability</em> by reducing MTTR,
+      not by reducing the failure rate. Reliability (MTBF) comes from design quality, testing and component selection.
+    </div>
+  </details>
+
+  <details class="acc">
+    <summary>Q12. What are the practical challenges of writing a device driver for a microkernel versus a monolithic kernel?</summary>
+    <div class="acc-body">
+      <b>Microkernel driver challenges:</b>
+      <ul class="tight">
+        <li>The driver cannot directly manipulate kernel data structures; it must request capabilities or memory
+          mappings from the kernel through IPC — every interaction has protocol overhead.</li>
+        <li>Interrupt handling is split: the kernel catches the IRQ and forwards it as a message to the driver process,
+          which adds latency and requires careful design to avoid losing edge-triggered interrupts.</li>
+        <li>DMA buffers must be shared carefully between the kernel and the user-space driver; IOMMU/SMMU programming
+          becomes mandatory for safety.</li>
+        <li>Debugging spans two address spaces, so a single logical operation appears as a message trace rather than a
+          call stack.</li>
+      </ul>
+      <b>Monolithic driver challenges:</b> no isolation (a bug panics the machine), strict kernel coding rules (no
+      floating point, limited stack, GFP_ATOMIC constraints in interrupt context), and re-entrancy/locking complexity
+      on SMP.
+      <br><b>Interview point:</b> the microkernel makes the driver <em>harder to write but safer to run</em>; the
+      monolithic kernel makes it <em>easier to write but dangerous to run</em>. Choose based on the consequence of
+      failure, not on developer convenience.
+    </div>
+  </details>
+
+  <h3>9.1 Industry Perspective — Where This Topic Appears in Real Engineering</h3>
+  <div class="box def">
+    <ul class="tight" style="margin:0;">
+      <li><b>Automotive (AUTOSAR / ISO 26262):</b> ASIL-D ECUs use a microkernel or a safety hypervisor so that a
+        QM-level infotainment partition cannot affect the ASIL-D braking partition. The architecture decision is a
+        certification decision.</li>
+      <li><b>Aerospace (DO-178C, ARINC 653):</b> time and space partitioning is mandated; the kernel must provide
+        guaranteed CPU time and memory isolation between partitions.</li>
+      <li><b>Android / Linux devices:</b> a modular monolithic kernel with a huge driver ecosystem wins on hardware
+        support breadth and throughput, accepting weaker isolation (mitigated by SELinux, KASAN, and userspace
+        HALs).</li>
+      <li><b>Hypervisors and cloud (KVM, Xen, seL4):</b> a smaller privileged core enables multitenant security;
+        Xen's microkernel-style design was chosen precisely for this.</li>
+      <li><b>IoT / MCU firmware (Zephyr, FreeRTOS):</b> a static, configurable monolithic kernel is used because
+        RAM (tens of kB) and flash are far too scarce for multiple server processes.</li>
+      <li><b>VLSI/SoC validation:</b> kernel architecture determines the memory-access patterns seen by the memory
+        controller and interconnect; performance validation engineers trace IPC-heavy vs IPC-light workloads to
+        characterise bandwidth and latency budgets.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ==================== 10. APPLICATIONS ==================== -->
+<section id="applications">
+  <h2><span class="num">10</span> Applications &amp; Industry Relevance</h2>
+
+  <div class="grid2">
+    <div class="card teal">
+      <h4>Practical Applications</h4>
+      <ul class="tight">
+        <li><b>Smartphones &amp; tablets</b> — Android (modular monolithic Linux) and iOS (hybrid XNU).</li>
+        <li><b>Desktop &amp; server OS</b> — Windows (hybrid NT), Linux (modular monolithic), macOS (hybrid).</li>
+        <li><b>Safety-critical RTOS</b> — QNX Neutrino, VxWorks, seL4 (microkernel).</li>
+        <li><b>Industrial control &amp; robotics</b> — deterministic microkernel/RTOS with bounded latency.</li>
+        <li><b>Network appliances &amp; firewalls</b> — microkernel or userspace networking (DPDK) for isolation.</li>
+        <li><b>Automotive ECU / ADAS</b> — hypervisor + microkernel partitioning.</li>
+        <li><b>Aerospace flight control</b> — ARINC 653 partitioned kernels.</li>
+        <li><b>Consumer MCU firmware</b> — static monolithic RTOS kernels.</li>
+      </ul>
+    </div>
+    <div class="card orange">
+      <h4>Design Considerations in Industry</h4>
+      <ul class="tight">
+        <li><b>Certification cost</b> — TCB size drives verification effort; a 10× smaller kernel can cut
+          certification cost by more than 10×.</li>
+        <li><b>IPC budget</b> — count the IPC hops for the worst-case operation before choosing an architecture.</li>
+        <li><b>Memory footprint</b> — multiple server processes need separate stacks, page tables and heaps;
+          on a 64 kB MCU this alone rules out a microkernel.</li>
+        <li><b>Determinism</b> — worst-case, not average, latency must be provable.</li>
+        <li><b>Cache/TLB behaviour</b> — IPC-heavy designs thrash the cache; measure, do not assume.</li>
+        <li><b>Driver availability</b> — monolithic kernels win because vendors ship Linux drivers first.</li>
+        <li><b>Upgrade path</b> — user-space servers can be updated without a kernel reboot.</li>
+        <li><b>Security</b> — smaller TCB, capability-based access, mandatory IOMMU/SMMU for DMA isolation.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>10.1 Advantages and Limitations at a Glance</h3>
+  <div class="tbl-wrap">
+  <table>
+    <caption>Table 10.1 — Architecture decision matrix</caption>
+    <thead><tr><th>Architecture</th><th>Best For</th><th>Worst For</th><th>Key Metric</th></tr></thead>
+    <tbody>
+      <tr><td>Monolithic</td><td>Throughput-heavy, rich driver ecosystem, general purpose</td><td>Safety certification, high-security isolation</td><td>Lowest latency, largest TCB</td></tr>
+      <tr><td>Modular monolithic</td><td>Desktop/server/embedded Linux</td><td>Hard real-time without PREEMPT_RT</td><td>Flexibility + speed</td></tr>
+      <tr><td>Microkernel</td><td>Safety-critical, certified, secure, high-availability</td><td>Memory-constrained MCUs, graphics-heavy workloads</td><td>Smallest TCB, best isolation</td></tr>
+      <tr><td>Hybrid</td><td>General-purpose OS needing both speed and structure</td><td>Formal verification</td><td>Balanced trade-off</td></tr>
+      <tr><td>Layered</td><td>Education, structured design, portable cores</td><td>Latency-critical paths</td><td>Clarity, at a latency cost</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>10.2 Career and Job-Role Relevance</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Role</th><th>How Kernel Architecture Appears</th></tr></thead>
+    <tbody>
+      <tr><td>Embedded Firmware Engineer</td><td>BSP porting, RTOS configuration, interrupt latency tuning, driver development.</td></tr>
+      <tr><td>Linux Kernel / Systems Engineer</td><td>Module development, scheduling, memory management, upstream contribution.</td></tr>
+      <tr><td>SoC / VLSI Validation Engineer</td><td>Characterising MMU/TLB, cache-coherency and interconnect behaviour under OS workloads.</td></tr>
+      <tr><td>FPGA / Hardware-Software Codesign</td><td>Soft-core processors running RTOS; interrupt and DMA architecture.</td></tr>
+      <tr><td>Automotive Software Engineer</td><td>AUTOSAR, hypervisors, ISO 26262 partitioning, microkernel RTOS.</td></tr>
+      <tr><td>Security Engineer</td><td>Attack-surface reduction, TCB analysis, sandboxing, capability systems.</td></tr>
+      <tr><td>Performance Engineer</td><td>System-call latency benchmarking, cache/TLB profiling, IPC optimisation.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ==================== 11. INTERACTIVE QUIZ ==================== -->
+<section id="quiz">
+  <h2><span class="num">11</span> Interactive Topic Quiz — 10 Questions</h2>
+  <p>Select one option per question, then click <b>Check Answers</b>. You can change your answers and re-check at any time.</p>
+
+  <form id="quizForm" onsubmit="return false;"></form>
+
+  <div class="btnrow no-print">
+    <button class="btn-p" onclick="checkQuiz()">✔ Check Answers</button>
+    <button class="btn-s" onclick="resetQuiz()">↻ Reset Quiz</button>
+  </div>
+
+  <div class="scorebox" id="scoreBox">
+    <div>Your Score: <span class="big" id="scoreNum">0 / 10</span> &nbsp; (<span id="scorePct">0 %</span>)</div>
+    <div id="scoreMsg" style="font-size:.9rem; margin-top:6px; font-weight:500;"></div>
+    <div class="pbar"><div id="pbarFill"></div></div>
+  </div>
+</section>
+
+<!-- ==================== 12. REVISION ==================== -->
+<section id="revision">
+  <h2><span class="num">12</span> Additional Revision Materials</h2>
+
+  <h3>12.1 One-Page Formula Sheet</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Concept</th><th>Formula</th><th>Remember</th></tr></thead>
+    <tbody>
+      <tr><td>System-call latency</td><td>T<sub>sc</sub> = T<sub>trap</sub> + T<sub>disp</sub> + T<sub>svc</sub> + T<sub>ret</sub></td><td>Architecture-independent baseline</td></tr>
+      <tr><td>Cycles → time</td><td>T = N<sub>cyc</sub>/f<sub>clk</sub></td><td>1500 cyc @ 3 GHz = 500 ns</td></tr>
+      <tr><td>Layered latency</td><td>T<sub>lay</sub> = T<sub>trap</sub> + n(T<sub>L</sub>+T<sub>C</sub>) + T<sub>ret</sub></td><td>Linear in n</td></tr>
+      <tr><td>Microkernel latency</td><td>T<sub>micro</sub> = T<sub>trap</sub> + k·T<sub>ipc</sub> + T<sub>srv</sub> + T<sub>ret</sub></td><td>k = IPC hops</td></tr>
+      <tr><td>Slowdown</td><td>R = T<sub>micro</sub>/T<sub>mono</sub></td><td>R &gt; 1 = slower</td></tr>
+      <tr><td>Amdahl (slowdown)</td><td>S = 1/[(1−f) + f·d]</td><td>f = moved fraction, d = slowdown</td></tr>
+      <tr><td>CPU utilisation</td><td>U = 1 − p<sup>n</sup></td><td>p = I/O wait probability</td></tr>
+      <tr><td>Minimum n</td><td>n<sub>min</sub> = ⌈ln(1−U)/ln p⌉</td><td>Always verify by substitution</td></tr>
+      <tr><td>Availability</td><td>A = MTBF/(MTBF+MTTR)</td><td>Downtime/yr = 8760(1−A) h</td></tr>
+      <tr><td>Little's Law</td><td>L = λW</td><td>Steady-state queue</td></tr>
+      <tr><td>Throughput</td><td>X = 1/T<sub>sc</sub></td><td>calls per second</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>12.2 High-Priority GATE Concepts</h3>
+  <div class="grid2">
+    <div class="card">
+      <h4>Frequently Tested</h4>
+      <ul class="tight">
+        <li>Mode switch vs context switch (very high frequency)</li>
+        <li>Monolithic vs microkernel classification of real systems</li>
+        <li>Layer numbering conventions (layer 0 = hardware)</li>
+        <li>U = 1 − p<sup>n</sup> numerical problems</li>
+        <li>Amdahl's Law with a slowdown factor</li>
+        <li>Number of mode transitions per IPC round trip</li>
+        <li>Advantages/disadvantages matching questions</li>
+        <li>TCB size and fault isolation reasoning</li>
+      </ul>
+    </div>
+    <div class="card orange">
+      <h4>Common Traps</h4>
+      <ul class="tight">
+        <li>Confusing "modular" with "microkernel"</li>
+        <li>Assuming a microkernel has fewer context switches</li>
+        <li>Using speedup s instead of slowdown d in Amdahl's Law</li>
+        <li>Using the denominator instead of the reciprocal as the answer</li>
+        <li>Forgetting the ceiling in n<sub>min</sub> calculations</li>
+        <li>Confusing failure rate λ with availability A</li>
+        <li>Assuming average latency answers real-time questions</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>12.3 Memory Aids</h3>
+  <div class="box tip">
+    <ul class="tight" style="margin:0;">
+      <li><b>"Mono = One big room, Micro = Many small rooms"</b> — one address space vs many isolated ones.</li>
+      <li><b>"Hybrid = microkernel's structure, monolithic's speed"</b> — the negotiation between the two.</li>
+      <li><b>Layered = Layer 0 is the floor (hardware)</b> — you build upward from the floor.</li>
+      <li><b>Amdahl's mnemonics:</b> "<b>1 over (rest plus moved times slower)</b>" —
+        S = 1/[(1−f) + f·d].</li>
+      <li><b>Availability:</b> "<b>Up over Up plus Down</b>" — A = MTBF/(MTBF + MTTR).</li>
+      <li><b>Microkernel IPC count:</b> "send + reply = 2 messages, 4 mode transitions".</li>
+    </ul>
+  </div>
+
+  <h3>12.4 Comparison with Related Concepts</h3>
+  <div class="tbl-wrap">
+  <table>
+    <caption>Table 12.1 — Kernel architecture vs virtualisation architecture</caption>
+    <thead><tr><th>Feature</th><th>Microkernel</th><th>Hypervisor (Type 1)</th><th>Containers</th></tr></thead>
+    <tbody>
+      <tr><td>Isolation unit</td><td>Server process</td><td>Virtual machine</td><td>Namespace/cgroup</td></tr>
+      <tr><td>Privilege boundary</td><td>Ring 0 / ring 3</td><td>Root / non-root mode (VT-x, EL2)</td><td>Same kernel, no boundary</td></tr>
+      <tr><td>Overhead</td><td>Moderate (IPC)</td><td>High (full OS per VM)</td><td>Very low</td></tr>
+      <tr><td>Security strength</td><td>High</td><td>Very high</td><td>Moderate</td></tr>
+      <tr><td>Typical use</td><td>Safety-critical RTOS</td><td>Cloud, multitenancy</td><td>Microservices</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>12.5 Common Errors &amp; Troubleshooting Tips</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Symptom</th><th>Likely Cause</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td>System-call latency far higher than predicted</td><td>Cold cache/TLB after mode switch, or CPU frequency scaling</td><td>Pin to a core, set the governor to performance, warm up the loop</td></tr>
+      <tr><td>Microkernel IPC unexpectedly slow</td><td>Message copying instead of memory remapping; too many hops</td><td>Use register-based short messages; reduce k; share memory for bulk data</td></tr>
+      <tr><td>Intermittent kernel panic under I/O load</td><td>DMA coherency bug or unaligned DMA buffer</td><td>Check cache maintenance operations and buffer alignment</td></tr>
+      <tr><td>High interrupt latency jitter</td><td>Long non-preemptible critical section</td><td>Enable PREEMPT_RT / thread the ISR / shorten spinlocks</td></tr>
+      <tr><td>Utilisation plateaus below expectation</td><td>Multiprogramming degree already past the knee, or memory thrashing</td><td>Recompute n<sub>min</sub>; reduce resident set; check swap activity</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ==================== 13. VALIDATION ==================== -->
+<section id="checks">
+  <h2><span class="num">13</span> Technical Validation &amp; Quality Checks</h2>
+
+  <div class="grid2">
+    <div class="card teal">
+      <h4>✔ Consistency Checks Performed</h4>
+      <ul class="check tight">
+        <li>All architecture diagrams match the subsystem table (Table 3.1) — no component appears in the wrong privilege level.</li>
+        <li>Every numerical value used in the timing bars of §5.1 is taken directly from Solved Problem 3 (0.5, 1.8, 2.5, 0.2 μs; k = 4).</li>
+        <li>Equation 6.4 reproduces T<sub>micro</sub> = 10.4 μs exactly as used in Problem 3 and GATE Q12-style questions.</li>
+        <li>Equation 6.6 is verified: S = 1/[(1−0.6)+0.6×3] = 0.4545 (2.2× slowdown), matching Problem 5(a).</li>
+        <li>Equation 6.7/6.8 verified: p = 0.2, n = 2 → U = 0.96 ✔; p = 0.1, n = 2 → U = 0.99 ✔.</li>
+        <li>Equation 6.13 verified: 8760 × (4/2004) = 17.49 h; 8760 × (0.1/2000.1) = 0.438 h; ratio ≈ 39.9×.</li>
+        <li>Units checked throughout: μs, ns, Hz, s<sup>−1</sup>, hours, dimensionless ratios.</li>
+        <li>All quiz answer keys are single-valued; scoring logic handles unanswered questions separately.</li>
+        <li>Every navigation link points to an existing section ID.</li>
+      </ul>
+    </div>
+    <div class="card orange">
+      <h4>⚠ Assumptions &amp; Limitations</h4>
+      <ul class="tight">
+        <li>All latency figures are <b>representative order-of-magnitude values</b>, not measurements from a specific
+          machine. Real values vary with core microarchitecture, cache state, load and power state.</li>
+        <li>The U = 1 − p<sup>n</sup> model assumes statistically independent processes, single-core execution and
+          negligible context-switch overhead. It is a pedagogical model, not a scheduling simulator.</li>
+        <li>The availability model assumes constant failure rates (exponential distribution), independent failures,
+          and no cascading faults — a standard simplifying assumption in reliability engineering.</li>
+        <li>The Amdahl model treats the slowdown factor <i>d</i> as uniform across the moved fraction, which is an
+          approximation; in practice some operations are moved and others are not.</li>
+        <li>No simulation screenshot was provided, so all plots are clearly labelled as illustrative analytical
+          constructions.</li>
+        <li>All GATE-style questions are original practice items and are <b>not</b> previous-year GATE questions.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== DELIVERABLES ==================== -->
+<section id="deliverables">
+  <h2><span class="num">14</span> Deliverables, Instructions &amp; Confirmation</h2>
+
+  <h3>14.1 Included Sections</h3>
+  <ol class="tight">
+    <li>Introduction, fundamental principle, importance, prerequisites and classification</li>
+    <li>Learning objectives, terminology and definitions</li>
+    <li>Architecture diagrams (monolithic, microkernel, layered, hybrid) + component/function table</li>
+    <li>Working principle with step-by-step system-call path and per-architecture behaviour</li>
+    <li>Timing diagrams and performance plots (system-call timeline, privilege-level timeline, U vs n plot)</li>
+    <li>Mathematical model — 13 numbered equations with derivations, units and limiting cases</li>
+    <li>Five solved numerical problems of increasing difficulty</li>
+    <li>Twelve original GATE-style MCQs with full solutions</li>
+    <li>Twelve technical interview questions with expandable answers and industry perspective</li>
+    <li>Applications, industry relevance, advantages/limitations, career mapping</li>
+    <li>Interactive 10-question quiz with automatic scoring, feedback and reset</li>
+    <li>Revision materials: formula sheet, memory aids, comparison tables, troubleshooting</li>
+    <li>Technical validation and quality-check summary</li>
+  </ol>
+
+  <h3>14.2 How to Open the File in Chrome or Edge</h3>
+  <ol class="tight">
+    <li>Click the <b>Download this page</b> button at the top (or press <kbd>Ctrl</kbd>+<kbd>S</kbd> and choose
+      "Webpage, Complete").</li>
+    <li>Save the file as <code>OS_Kernel_Architecture.html</code> — the <code>.html</code> extension is essential.</li>
+    <li>Locate the file in File Explorer and <b>double-click</b> it, or right-click → <b>Open with</b> →
+      <b>Google Chrome</b> / <b>Microsoft Edge</b>.</li>
+    <li>Alternatively, open Chrome/Edge, press <kbd>Ctrl</kbd>+<kbd>O</kbd>, and browse to the file.</li>
+    <li>To print or save as PDF: press <kbd>Ctrl</kbd>+<kbd>P</kbd> → Destination "Save as PDF". The print stylesheet
+      hides navigation and buttons and keeps figures and tables intact.</li>
+  </ol>
+  <p class="small">
+    No internet connection, web server, or external library is required. All CSS, JavaScript, SVG diagrams and
+    content are embedded in the single file.
+  </p>
+
+  <h3>14.3 Simulation Screenshot Confirmation</h3>
+  <div class="box def">
+    <b>No simulation screenshot was attached to this request.</b> Accordingly, no image has been embedded, and no
+    measured data is claimed. Every waveform, timing diagram and plot in this page is an <b>illustrative analytical
+    construction</b>, generated from the equations in §6 and clearly labelled as such in Figure captions and in the
+    note at the start of §5.
+  </div>
+
+  <h3>14.4 Statement of Limitations</h3>
+  <div class="box warn">
+    This material is a teaching aid. Timing values are representative and must not be used as datasheet figures.
+    Real system-call latency, IPC cost and availability depend on the specific silicon, kernel version, configuration
+    and workload, and should always be measured on the target hardware using tools such as <code>lmbench</code>,
+    <code>cyclictest</code>, <code>perf</code> and PMU counters.
+  </div>
+
+  <div class="center no-print" style="margin-top:22px;">
+    <button class="btn-d" onclick="downloadPage()">⬇ Download this page as a standalone HTML file</button>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <p><b>Operating Systems &amp; Systems Programming</b> — Unit: Kernel Architecture &amp; Subsystems</p>
+  <p>Topic: Architecture of an Operating System Kernel (Monolithic, Microkernel, Hybrid, Layered)</p>
+  <p style="margin-top:10px; opacity:.8;">Prepared for B.E./B.Tech CSE students, GATE aspirants, and core electronics interview candidates.
+    All questions are original practice material. Use <kbd>Ctrl</kbd>+<kbd>P</kbd> to print or save as PDF.</p>
+</footer>
+
+<script>
+/* =========================================================
+   QUIZ DATA — 10 questions
+   ========================================================= */
+const QUIZ_DATA = [
+  {
+    q: "Which kernel architecture has the smallest Trusted Computing Base (TCB)?",
+    opts: ["Monolithic kernel", "Microkernel", "Modular monolithic kernel", "Layered kernel with 6 layers"],
+    ans: 1,
+    diff: "Easy",
+    exp: "A microkernel keeps only IPC, minimal scheduling and basic address-space control in kernel mode, so the privileged code that must be trusted is typically 10-15 kLOC versus millions of lines in a monolithic kernel. A layered kernel is an internal structuring technique and does not by itself reduce the privileged code."
+  },
+  {
+    q: "Loadable kernel modules are a distinguishing feature of which kernel design?",
+    opts: ["Microkernel", "Exokernel", "Modular monolithic kernel", "Type-1 hypervisor"],
+    ans: 2,
+    diff: "Easy",
+    exp: "Modules are dynamically linked into the kernel's own address space and run in kernel mode. This gives extensibility without fault isolation, which is the defining characteristic of a modular monolithic kernel such as Linux."
+  },
+  {
+    q: "In a strictly layered kernel, layer N may call:",
+    opts: ["Any layer below it", "Only layer N-1", "Only layer N+1", "Only the hardware layer directly"],
+    ans: 1,
+    diff: "Moderate",
+    exp: "Strict layering permits a layer to use only the services of the immediately adjacent lower layer. Allowing calls to any lower layer (option A) is the relaxed design used in practice, but it is not strict layering."
+  },
+  {
+    q: "Which of the following is NOT a responsibility of the operating-system kernel?",
+    opts: ["Process scheduling", "Virtual memory management", "Compiling user source code into machine code", "Device interrupt handling"],
+    ans: 2,
+    diff: "Easy",
+    exp: "Compilation is performed by a user-space compiler (gcc, clang). The kernel loads and runs the resulting binary but never translates source code. The other three are core kernel responsibilities."
+  },
+  {
+    q: "A microkernel service request uses k = 3 IPC hops at 2.0 microseconds each, with trap = 1.0 microsecond, server work = 3.0 microseconds and return = 1.0 microsecond. The total latency is:",
+    opts: ["8.0 microseconds", "11.0 microseconds", "13.0 microseconds", "9.0 microseconds"],
+    ans: 1,
+    diff: "Moderate",
+    exp: "T = trap + k*T_ipc + T_srv + T_ret = 1.0 + (3 x 2.0) + 3.0 + 1.0 = 1.0 + 6.0 + 3.0 + 1.0 = 11.0 microseconds. Option A forgets the IPC entirely; option C double-counts one hop; option D omits one hop."
+  },
+  {
+    q: "Which well-known real-time operating system uses a genuine microkernel architecture?",
+    opts: ["Classic Linux", "QNX Neutrino", "MS-DOS", "Windows 10"],
+    ans: 1,
+    diff: "Moderate",
+    exp: "QNX Neutrino is a textbook microkernel: drivers, file systems and the network stack run as separate user-space processes. Linux is modular monolithic, MS-DOS is monolithic, and Windows 10 is a hybrid kernel."
+  },
+  {
+    q: "Which instruction or event causes a transition from user mode to kernel mode?",
+    opts: ["An ordinary arithmetic instruction such as ADD", "A trap instruction such as SYSCALL or SVC", "A load from a user-space address", "A branch instruction such as JMP"],
+    ans: 1,
+    diff: "Easy",
+    exp: "Only a deliberate trap (software interrupt) or an asynchronous hardware interrupt causes a privilege-level change. Arithmetic, load and branch instructions execute at the current privilege level. Attempting a privileged instruction in user mode raises a trap as an exception, but that is a fault, not a normal service request path."
+  },
+  {
+    q: "Using U = 1 - p^n, with p = 0.5 and n = 4, the CPU utilisation is:",
+    opts: ["87.50 percent", "93.75 percent", "96.88 percent", "50.00 percent"],
+    ans: 1,
+    diff: "Moderate",
+    exp: "U = 1 - (0.5)^4 = 1 - 0.0625 = 0.9375 = 93.75 percent. Option A corresponds to n = 3 (1 - 0.125). Option C corresponds to n = 5 (1 - 0.03125). Option D is p itself, a common slip."
+  },
+  {
+    q: "In a microkernel, inter-process communication between a client and a user-space server is typically implemented using:",
+    opts: ["Direct shared global variables", "Message passing through the kernel", "Function calls across linked object files", "Hardware DMA only"],
+    ans: 1,
+    diff: "Easy",
+    exp: "Because client and server occupy separate address spaces, they cannot share global variables or make direct function calls. The kernel provides message-passing primitives (ports, send/receive) that copy or remap the data across address spaces."
+  },
+  {
+    q: "A layered kernel with n = 4 layers costs T_trap = 1.0 microsecond, T_L = 0.5 microsecond per layer, T_C = 0.5 microsecond crossing per layer, and T_ret = 0.0 microsecond. The total latency is:",
+    opts: ["4.0 microseconds", "5.0 microseconds", "6.0 microseconds", "2.0 microseconds"],
+    ans: 1,
+    diff: "Moderate",
+    exp: "T = 1.0 + 4 x (0.5 + 0.5) + 0.0 = 1.0 + 4.0 = 5.0 microseconds. Option A omits the trap. Option C counts 5 layers. Option D omits both the trap and two layers."
+  }
+];
+
+/* =========================================================
+   QUIZ RENDERING
+   ========================================================= */
+function renderQuiz() {
+  const form = document.getElementById('quizForm');
+  let html = '';
+  QUIZ_DATA.forEach(function(item, i) {
+    html += '<div class="qcard" id="qcard' + i + '">';
+    html += '<p class="qtext"><span class="qnum">Q' + (i + 1) + '</span>' + item.q +
+            ' <span class="badge ' + item.diff.toLowerCase() + '">' + item.diff + '</span></p>';
+    html += '<div class="opts">';
+    item.opts.forEach(function(opt, j) {
+      const letter = String.fromCharCode(65 + j);
+      html += '<label class="opt"><input type="radio" name="q' + i + '" value="' + j + '">' +
+              '<span><b>' + letter + '.</b> ' + opt + '</span></label>';
+    });
+    html += '</div>';
+    html += '<div class="fb" id="fb' + i + '"></div>';
+    html += '</div>';
+  });
+  form.innerHTML = html;
+}
+
+/* =========================================================
+   SCORING
+   ========================================================= */
+function checkQuiz() {
+  let score = 0, answered = 0, unanswered = 0;
+
+  QUIZ_DATA.forEach(function(item, i) {
+    const card = document.getElementById('qcard' + i);
+    const fb = document.getElementById('fb' + i);
+    const sel = document.querySelector('input[name="q' + i + '"]:checked');
+
+    card.classList.remove('correct', 'wrong', 'unanswered');
+    fb.classList.remove('show', 'good', 'bad', 'neutral');
+
+    if (!sel) {
+      unanswered++;
+      card.classList.add('unanswered');
+      fb.innerHTML = '<b>Not answered.</b> The correct answer is <b>' +
+        String.fromCharCode(65 + item.ans) + '</b>. ' + item.exp;
+      fb.classList.add('show', 'neutral');
+      return;
+    }
+
+    answered++;
+    const chosen = parseInt(sel.value, 10);
+
+    if (chosen === item.ans) {
+      score++;
+      card.classList.add('correct');
+      fb.innerHTML = '<b>&#10004; Correct.</b> ' + item.exp;
+      fb.classList.add('show', 'good');
+    } else {
+      card.classList.add('wrong');
+      fb.innerHTML = '<b>&#10008; Incorrect.</b> The correct answer is <b>' +
+        String.fromCharCode(65 + item.ans) + '</b>. ' + item.exp;
+      fb.classList.add('show', 'bad');
+    }
+  });
+
+  const pct = Math.round((score / QUIZ_DATA.length) * 100);
+
+  document.getElementById('scoreNum').textContent = score + ' / ' + QUIZ_DATA.length;
+  document.getElementById('scorePct').textContent = pct + ' %';
+  document.getElementById('pbarFill').style.width = pct + '%';
+
+  let msg = '';
+  if (unanswered > 0) {
+    msg = unanswered + ' question(s) left unanswered. ';
+  }
+  if (pct === 100) {
+    msg += 'Outstanding — you have full command of kernel architecture.';
+  } else if (pct >= 80) {
+    msg += 'Excellent. Review the questions you missed and you are exam-ready.';
+  } else if (pct >= 60) {
+    msg += 'Good foundation. Revisit §3 (diagrams) and §6 (equations).';
+  } else if (pct >= 40) {
+    msg += 'Fair. Work through the solved problems in §7 carefully before retrying.';
+  } else {
+    msg += 'Needs revision. Read §4 (working principle) and §12 (revision sheet) first.';
+  }
+
+  document.getElementById('scoreMsg').textContent = msg;
+  document.getElementById('scoreBox').classList.add('show');
+  document.getElementById('scoreBox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/* =========================================================
+   RESET
+   ========================================================= */
+function resetQuiz() {
+  QUIZ_DATA.forEach(function(item, i) {
+    const card = document.getElementById('qcard' + i);
+    const fb = document.getElementById('fb' + i);
+    card.classList.remove('correct', 'wrong', 'unanswered');
+    fb.classList.remove('show', 'good', 'bad', 'neutral');
+    fb.innerHTML = '';
+    const radios = document.querySelectorAll('input[name="q' + i + '"]');
+    radios.forEach(function(r) { r.checked = false; });
+  });
+
+  document.getElementById('scoreBox').classList.remove('show');
+  document.getElementById('scoreNum').textContent = '0 / 10';
+  document.getElementById('scorePct').textContent = '0 %';
+  document.getElementById('scoreMsg').textContent = '';
+  document.getElementById('pbarFill').style.width = '0%';
+
+  document.getElementById('quiz').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* =========================================================
+   DOWNLOAD SELF (standalone HTML)
+   ========================================================= */
+function downloadPage() {
+  try {
+    const doctype = '<!DOCTYPE html>\n';
+    const html = doctype + document.documentElement.outerHTML;
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'OS_Kernel_Architecture.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+  } catch (e) {
+    alert('Your browser blocked the automatic download. Please use Ctrl+S and choose "Webpage, Complete".');
+  }
+}
+
+/* =========================================================
+   INIT
+   ========================================================= */
+document.addEventListener('DOMContentLoaded', function() {
+  renderQuiz();
+});
+</script>
+</body>
+</html>
